@@ -17,6 +17,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <signal.h>
+
+
 #define N(x) (sizeof(x) / sizeof((x)[0]))
 
 #define ERROR_DEFAULT_MSG "something failed"

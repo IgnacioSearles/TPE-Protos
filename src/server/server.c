@@ -7,6 +7,7 @@
 int main(void) {
     fd_selector selector = selector_new(MAX_CONNECTIONS_ALLOWED);
     if (selector == NULL) {
+        perror("server errror: could no initialize selector");
         return 1;
     }
 

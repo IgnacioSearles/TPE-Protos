@@ -1,6 +1,7 @@
 #include <errno.h>
 #include <netinet/in.h>
 #include <stdbool.h>
+#include <netdb.h>
 #include <stdio.h>
 #include <string.h>
 #include <fcntl.h>
@@ -142,4 +143,32 @@ int create_passive_tcp_socket(const char* ip_str, uint16_t port, uint32_t max_co
     }
 
     return passive_tcp_socket;
+}
+
+int connect_to_host(const char *host, const char *port) {
+    struct addrinfo hints = {
+        .ai_family = AF_UNSPEC,
+        .ai_socktype = SOCK_STREAM
+    };
+    struct addrinfo *res;
+
+    if (getaddrinfo(host, port, &hints, &res) != 0) {
+        return -1; 
+    }
+
+    for (struct addrinfo* rp = res; rp != NULL; rp = rp->ai_next) {
+        int sock = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+
+        if (sock < 0) continue;
+
+        if (connect(sock, rp->ai_addr, rp->ai_addrlen) == 0) {
+            freeaddrinfo(res);
+            return sock;
+        }
+
+        close(sock);
+    }
+
+    freeaddrinfo(res);
+    return -1;
 }

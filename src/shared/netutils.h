@@ -19,9 +19,17 @@ int set_non_blocking(int fd);
  * si el parametro ip_str es null el socket escucha en todas las direcciones
  *
  * retorna menor a 0 si ocurrio un error
- * returna el fd del socket si se realizo sin problema
+ * retorna el fd del socket si se realizo sin problema
  */
 int create_passive_tcp_socket(const char* ip_str, uint16_t port, uint32_t max_connections);
+
+/*
+ * Crea un socket TCP conectado a un host determinado en un puerto determinado
+ *
+ * retorna menor a 0 si ocurrio un error
+ * retorna el fd del socket si se realizo sin problmea
+ * */
+int connect_to_host(const char *host, const char *port);
 
 #define SOCKADDR_TO_HUMAN_MIN (INET6_ADDRSTRLEN + 5 + 1)
 /**

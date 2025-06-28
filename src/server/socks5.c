@@ -1,8 +1,4 @@
 #include "socks5.h"
-#include "../shared/buffer.h"
-#include "../shared/selector.h"
-#include "../shared/stm.h"
-#include "../shared/parser.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>

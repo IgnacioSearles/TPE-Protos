@@ -162,6 +162,7 @@ int connect_to_host(const char *host, const char *port) {
         if (sock < 0) continue;
 
         if (connect(sock, rp->ai_addr, rp->ai_addrlen) == 0) {
+            set_non_blocking(sock);
             freeaddrinfo(res);
             return sock;
         }

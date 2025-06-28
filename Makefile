@@ -17,7 +17,7 @@ CLIENT_OUTPUT_FILE=$(OUTPUT_FOLDER)/client
 $(SERVER_OUTPUT_FILE) $(CLIENT_OUTPUT_FILE): | $(OUTPUT_FOLDER)
 $(SERVER_OBJECTS) $(CLIENT_OBJECTS) $(SHARED_OBJECTS): | objdirs
 
-all: dirs server client
+all: objdirs server client
 
 server: $(SERVER_OUTPUT_FILE)
 client: $(CLIENT_OUTPUT_FILE)

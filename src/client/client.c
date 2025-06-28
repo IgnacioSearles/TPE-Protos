@@ -21,6 +21,7 @@ void handle_shutdown(int sig) {
 
 struct client_data {
     int server_fd;
+    volatile bool* done;
     buffer *read_buffer;
     buffer *write_buffer;
 };
@@ -33,6 +34,7 @@ static void client_read(struct selector_key *key) {
     ssize_t n = recv(key->fd, ptr, bytes, 0);
 
     if (n <= 0) {
+        *data->done = true;
         selector_unregister_fd(key->s, key->fd);
         close(key->fd);
         return;
@@ -101,6 +103,7 @@ int main(int argc, char *argv[]) {
     buffer_init(&write_buffer, BUFFER_SIZE, w_data);
     struct client_data data = { 
         .server_fd = server_fd,
+        .done = &done,
         .read_buffer = &read_buffer, 
         .write_buffer = &write_buffer 
     };

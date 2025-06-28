@@ -27,6 +27,7 @@ int client_params_parse(int argc, char **argv, client_config *config) {
 
     if (config->host == NULL || config->port == NULL) {
         fprintf(stderr, "client error: missing parameters\n");
+        printf("client: %s -h <host> -p <port>\n", argv[0]);
         return -1;
     }
 

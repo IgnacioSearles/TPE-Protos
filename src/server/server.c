@@ -2,8 +2,10 @@
 #include "../shared/selector.h"
 #include "socks5.h"
 
+#define MAX_CONNECTIONS_ALLOWED 1024
+
 int main(void) {
-    fd_selector selector = selector_new(1024);
+    fd_selector selector = selector_new(MAX_CONNECTIONS_ALLOWED);
     if (selector == NULL) {
         return 1;
     }

@@ -1,10 +1,10 @@
 #ifndef SOCKS5_H
 #define SOCKS5_H
 
-#include "buffer.h"
-#include "selector.h"
-#include "stm.h"
-#include "parser.h"
+#include "../shared/buffer.h"
+#include "../shared/selector.h"
+#include "../shared/stm.h"
+#include "../shared/parser.h"
 
 #define MAX_DATA_SIZE 256
 #define INITIAL_BUFFER_SIZE 4096

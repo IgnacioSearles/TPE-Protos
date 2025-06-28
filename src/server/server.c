@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include "selector.h"
+#include "../shared/selector.h"
 #include "socks5.h"
 
 int main(void) {
@@ -13,6 +13,6 @@ int main(void) {
 
     printf("Sock5 init OK\n");
 
-    // selector_destroy(selector);
+    selector_destroy(selector);
     return 0;
 }

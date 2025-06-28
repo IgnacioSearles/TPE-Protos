@@ -2,6 +2,8 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <fcntl.h>
+#include <sys/socket.h>
 
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -94,4 +96,43 @@ int sock_blocking_copy(const int source, const int dest) {
 error:
 
     return ret;
+}
+
+int set_non_blocking(int fd) {
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags == -1) return -1;
+    return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+}
+
+int create_passive_tcp_socket(uint16_t port, uint32_t max_connections) {
+    int passive_tcp_socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (passive_tcp_socket < 0) {
+        return -1;
+    }
+
+    if (set_non_blocking(passive_tcp_socket) < 0) {
+        close(passive_tcp_socket);
+        return -1;
+    }
+    
+    int opt = 1;
+    setsockopt(passive_tcp_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    struct sockaddr_in addr = {
+        .sin_family = AF_INET,
+        .sin_addr.s_addr = htonl(INADDR_ANY),
+        .sin_port = htons(port),
+    };
+
+    if (bind(passive_tcp_socket, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        close(passive_tcp_socket);
+        return -1;
+    }
+
+    if (listen(passive_tcp_socket, max_connections) < 0) {
+        close(passive_tcp_socket);
+        return -1;
+    }
+
+    return passive_tcp_socket;
 }

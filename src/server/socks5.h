@@ -49,6 +49,6 @@ typedef struct socks5 {
 
 } socks5;
 
-void socks5_init(const int client_fd, fd_selector s);
+int socks5_init(const int client_fd, fd_selector s);
 
 #endif

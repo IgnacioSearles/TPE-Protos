@@ -42,9 +42,12 @@ static const struct state_definition states[] = {
 };
 
 // @Neich llamar cuando se acepta una conexión SOCKS5
-void socks5_init(const int client_fd, fd_selector s) {
+int socks5_init(const int client_fd, fd_selector s) {
     socks5* socks = malloc(sizeof(*socks));
-    if (socks == NULL) abort();
+    if (socks == NULL) {
+        close(client_fd);
+        return -1;
+    }
 
     socks->client_fd = client_fd;
     socks->origin_fd = -1;
@@ -71,6 +74,8 @@ void socks5_init(const int client_fd, fd_selector s) {
     };
 
     selector_register(s, client_fd, &handler, OP_READ, socks);
+
+    return 0;
 }
 
 static void socks5_read(struct selector_key *key) {

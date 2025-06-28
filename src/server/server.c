@@ -2,15 +2,15 @@
 #include <signal.h>
 #include "../shared/selector.h"
 #include "../shared/netutils.h"
+#include "server_params.h"
 #include "socks5.h"
+#include "server_config.h"
 #include <stdlib.h>
 #include <sys/socket.h>
 
 #define MAX_SOCKS5_CONNECTIONS 1000
 #define MAX_PCTP_CONNECTIONS 24
 #define MAX_CONNECTIONS (MAX_SOCKS5_CONNECTIONS + MAX_PCTP_CONNECTIONS)
-#define SOCKS5_PORT 1080
-#define PCTP_PORT 7777
 
 // TODO: checkear si esto esta bien para manejar la señal
 static volatile bool done = false;
@@ -60,19 +60,30 @@ static void accept_pctp(struct selector_key *key) {
     close(client_fd);
 }
 
-int main(void) {
+int main(int argc, char** argv) {
+    server_config config = create_config(); 
+
+    parse_server_params_status status = parse_server_params(argc, argv, &config);
+    if (status == PARAMS_SHOULD_EXIT || status == PARAMS_ERROR) {
+        destroy_config(&config);
+        return 0;
+    }
+
     signal(SIGINT, handle_shutdown);  // Ctrl+C
     signal(SIGTERM, handle_shutdown); // kill pid
 
-    int socks5_socket = create_passive_tcp_socket(SOCKS5_PORT, MAX_SOCKS5_CONNECTIONS); 
+    int socks5_socket = create_passive_tcp_socket(config.socks_addr, config.socks_port, MAX_SOCKS5_CONNECTIONS); 
     if (socks5_socket < 0) {
         perror("server error: failed to create SOCKS5 socket");
+        destroy_config(&config);
         return EXIT_FAILURE;
     }
 
-    int pctp_socket = create_passive_tcp_socket(PCTP_PORT, MAX_PCTP_CONNECTIONS);
+    int pctp_socket = create_passive_tcp_socket(config.pctp_addr, config.pctp_port, MAX_PCTP_CONNECTIONS);
     if (pctp_socket < 0) {
         perror("server error: failed to create PCTP socket");
+        close(socks5_socket);
+        destroy_config(&config);
         return EXIT_FAILURE;
     }
 
@@ -88,6 +99,7 @@ int main(void) {
         perror("server error: could no init selector library");
         close(socks5_socket);
         close(pctp_socket);
+        destroy_config(&config);
         return EXIT_FAILURE;
     }
 
@@ -96,6 +108,7 @@ int main(void) {
         perror("server errror: could no initialize selector");
         close(socks5_socket);
         close(pctp_socket);
+        destroy_config(&config);
         return EXIT_FAILURE;
     }
 
@@ -107,6 +120,7 @@ int main(void) {
         close(socks5_socket);
         close(pctp_socket);
         selector_destroy(selector);
+        destroy_config(&config);
         return EXIT_FAILURE;
     }
 
@@ -118,6 +132,7 @@ int main(void) {
         close(socks5_socket);
         close(pctp_socket);
         selector_destroy(selector);
+        destroy_config(&config);
         return EXIT_FAILURE;
     }
 
@@ -132,5 +147,6 @@ int main(void) {
     close(socks5_socket);
     close(pctp_socket);
     selector_destroy(selector);
+    destroy_config(&config);
     return 0;
 }

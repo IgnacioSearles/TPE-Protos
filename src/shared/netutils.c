@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <netinet/in.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
@@ -104,7 +105,7 @@ int set_non_blocking(int fd) {
     return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
-int create_passive_tcp_socket(uint16_t port, uint32_t max_connections) {
+int create_passive_tcp_socket(const char* ip_str, uint16_t port, uint32_t max_connections) {
     int passive_tcp_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (passive_tcp_socket < 0) {
         return -1;
@@ -120,9 +121,15 @@ int create_passive_tcp_socket(uint16_t port, uint32_t max_connections) {
 
     struct sockaddr_in addr = {
         .sin_family = AF_INET,
-        .sin_addr.s_addr = htonl(INADDR_ANY),
         .sin_port = htons(port),
     };
+
+    if (ip_str == NULL) {
+        addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    } else if (inet_pton(AF_INET, ip_str, &addr.sin_addr) <= 0) {
+        close(passive_tcp_socket);
+        return -1;
+    }
 
     if (bind(passive_tcp_socket, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
         close(passive_tcp_socket);

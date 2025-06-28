@@ -16,10 +16,12 @@ int set_non_blocking(int fd);
 /*
  * Crea un socket TCP pasivo no bloqueante que escucha
  *
+ * si el parametro ip_str es null el socket escucha en todas las direcciones
+ *
  * retorna menor a 0 si ocurrio un error
  * returna el fd del socket si se realizo sin problema
  */
-int create_passive_tcp_socket(uint16_t port, uint32_t max_connections);
+int create_passive_tcp_socket(const char* ip_str, uint16_t port, uint32_t max_connections);
 
 #define SOCKADDR_TO_HUMAN_MIN (INET6_ADDRSTRLEN + 5 + 1)
 /**

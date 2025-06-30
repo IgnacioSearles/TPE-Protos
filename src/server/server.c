@@ -13,7 +13,6 @@
 #define MAX_PCTP_CONNECTIONS 24
 #define MAX_CONNECTIONS (MAX_SOCKS5_CONNECTIONS + MAX_PCTP_CONNECTIONS)
 
-// TODO: checkear si esto esta bien para manejar la señal
 static volatile bool done = false;
 void handle_shutdown(int sig) {
     done = true;

@@ -18,6 +18,8 @@ void handle_shutdown(int sig) {
     done = true;
 }
 
+static server_config config;
+
 static void accept_socks5(struct selector_key *key) {
     struct sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
@@ -55,15 +57,17 @@ static void accept_pctp(struct selector_key *key) {
         return;
     }
 
-    if (pctp_init(client_fd, key->s, "postgres", "postgres") == -1){
+    if (pctp_init(client_fd, key->s, &config) == -1){
         close(client_fd);
-    } else {
-        printf("server ok: client connected to PCTP port\n");
+        perror("server error: could not initialize PCTP");
+        return;
     }
+
+    printf("server ok: client connected to PCTP port\n");
 }
 
 int main(int argc, char** argv) {
-    server_config config = create_config(); 
+    config = create_config(); 
 
     parse_server_params_status status = parse_server_params(argc, argv, &config);
     if (status == PARAMS_SHOULD_EXIT || status == PARAMS_ERROR) {

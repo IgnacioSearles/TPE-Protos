@@ -76,16 +76,16 @@ static void write_msg_to_buffer(buffer* write_buffer, const char* msg);
 static int send_buffer_msg(int fd, buffer* write_buffer);
 
 static const struct state_definition states[] = {
-    { .state = LOGIN_USER_READ,             .on_arrival = selector_set_interest_read, .on_read_ready = login_user_read, .on_departure = reset_user_state },
+    { .state = LOGIN_USER_READ,             .on_arrival = selector_set_interest_read, .on_read_ready = login_user_read },
     { .state = LOGIN_USER_SUCCESS_WRITE,    .on_arrival = selector_set_interest_write, .on_write_ready = login_user_success_write },
-    { .state = LOGIN_USER_INVALID_WRITE,    .on_arrival = selector_set_interest_write, .on_write_ready = login_user_invalid_write },
-    { .state = LOGIN_USER_ERROR_WRITE,      .on_arrival = selector_set_interest_write, .on_write_ready = login_user_error_write },
-    { .state = LOGIN_PASS_READ,             .on_arrival = selector_set_interest_read, .on_read_ready = login_pass_read, .on_departure = reset_pass_state },
+    { .state = LOGIN_USER_INVALID_WRITE,    .on_arrival = selector_set_interest_write, .on_write_ready = login_user_invalid_write, .on_departure = reset_user_state },
+    { .state = LOGIN_USER_ERROR_WRITE,      .on_arrival = selector_set_interest_write, .on_write_ready = login_user_error_write, .on_departure = reset_user_state },
+    { .state = LOGIN_PASS_READ,             .on_arrival = selector_set_interest_read, .on_read_ready = login_pass_read },
     { .state = LOGIN_PASS_SUCCESS_WRITE,    .on_arrival = selector_set_interest_write, .on_write_ready = login_pass_success_write },
-    { .state = LOGIN_PASS_INVALID_WRITE,    .on_arrival = selector_set_interest_write, .on_write_ready = login_pass_invalid_write },
-    { .state = LOGIN_PASS_ERROR_WRITE,      .on_arrival = selector_set_interest_write, .on_write_ready = login_pass_error_write },
-    { .state = MAIN_READ,                   .on_arrival = selector_set_interest_read, .on_read_ready = main_read, .on_departure = reset_main_state },
-    { .state = MAIN_ERROR_WRITE,            .on_arrival = selector_set_interest_write, .on_write_ready = main_error_write },
+    { .state = LOGIN_PASS_INVALID_WRITE,    .on_arrival = selector_set_interest_write, .on_write_ready = login_pass_invalid_write, .on_departure = reset_pass_state },
+    { .state = LOGIN_PASS_ERROR_WRITE,      .on_arrival = selector_set_interest_write, .on_write_ready = login_pass_error_write, .on_departure = reset_pass_state },
+    { .state = MAIN_READ,                   .on_arrival = selector_set_interest_read, .on_read_ready = main_read },
+    { .state = MAIN_ERROR_WRITE,            .on_arrival = selector_set_interest_write, .on_write_ready = main_error_write, .on_departure = reset_main_state },
     // { .state = STATS, },
     // { .state = ADD_USER, },
     // { .state = CONFIG, },
@@ -94,18 +94,16 @@ static const struct state_definition states[] = {
     { .state = ERROR,                       .on_arrival = on_close },
 };
 
-int pctp_init(const int client_fd, fd_selector selector, char* pctp_username, char* pctp_password) {
-    size_t user_len = strlen(pctp_username);
-    size_t pass_len = strlen(pctp_password);
-    if (user_len > MAX_DATA_SIZE || pass_len > MAX_DATA_SIZE) return -1;
+static unsigned int parser_classes[0xFF] = {0};
 
+int pctp_init(const int client_fd, fd_selector selector, server_config* config) {
     pctp* pctp_data = malloc(sizeof(*pctp_data));
     if (pctp_data == NULL) return -1;
 
-    strncpy(pctp_data->pctp_username, pctp_username, user_len);
-    pctp_data->pctp_username_len = user_len;
-    strncpy(pctp_data->pctp_password, pctp_password, pass_len);
-    pctp_data->pctp_password_len = pass_len;
+    pctp_data->config = config;
+    if (config->user_count == 0) {
+        add_user(config, "postgres", "postgres", ADMIN);
+    }
 
     pctp_data->client_fd = client_fd;
 
@@ -115,8 +113,6 @@ int pctp_init(const int client_fd, fd_selector selector, char* pctp_username, ch
 
     buffer_init(&(pctp_data->read_buffer), INITIAL_BUFFER_SIZE, pctp_data->read_raw_buff);
     buffer_init(&(pctp_data->write_buffer), INITIAL_BUFFER_SIZE, pctp_data->write_raw_buff);
-
-    unsigned int parser_classes[0xFF] = {0};
 
     for (int c = 'a'; c <= 'z'; c++){
         parser_classes[c] |= CLASS_ALNUM;
@@ -197,7 +193,8 @@ static unsigned login_user_read(struct selector_key *key) {
             printf("User parser succeded\n");
             printf("Username: %.*s\n", pctp_data->username_len, pctp_data->username);
 
-            if (check_username(pctp_data)) {
+            pctp_data->id = check_username(pctp_data);
+            if (pctp_data->id != -1) {
                 printf("Username is correct\n");
                 write_msg_to_buffer(&pctp_data->write_buffer, OK_USER_MSG);
                 return LOGIN_USER_SUCCESS_WRITE;
@@ -247,7 +244,8 @@ static unsigned login_pass_read(struct selector_key *key) {
             printf("Pass parser succeded\n");
             printf("Password: %.*s\n", pctp_data->password_len, pctp_data->password);
 
-            if (check_password(pctp_data)) {
+            int id = check_password(pctp_data);
+            if (id != -1) {
                 printf("Password is correct\n");
                 write_msg_to_buffer(&pctp_data->write_buffer, OK_PASS_MSG);
                 return LOGIN_PASS_SUCCESS_WRITE;
@@ -316,13 +314,24 @@ static void reset_main_state(const unsigned state, struct selector_key *key) {
 }
 
 static int check_username(pctp* pctp_data) {
-    if (pctp_data->username_len != pctp_data->pctp_username_len) return 0;
-    return strncmp(pctp_data->username, pctp_data->pctp_username, pctp_data->pctp_username_len) == 0;
+    for(int i=0; i<pctp_data->config->user_count; i++) {
+        server_user user = pctp_data->config->users[i];
+        if (user.role != ADMIN) continue;
+        int name_len = strlen(user.user);
+        if (pctp_data->username_len == name_len && strncmp(pctp_data->username, user.user, name_len) == 0) 
+            return i;
+    }
+    return -1;
 }
 
 static int check_password(pctp* pctp_data) {
-    if (pctp_data->password_len != pctp_data->pctp_password_len) return 0;
-    return strncmp(pctp_data->password, pctp_data->pctp_password, pctp_data->pctp_password_len) == 0;
+    if (pctp_data->id == -1 || pctp_data->id >= pctp_data->config->user_count) return -1;
+    server_user user = pctp_data->config->users[pctp_data->id];
+    if (user.role != ADMIN) return -1;
+    int pass_len = strlen(user.pass);
+    if (pctp_data->password_len != pass_len) return -1;
+    if (strncmp(pctp_data->password, user.pass, pass_len) != 0) return -1;
+    return pctp_data->id;
 }
 
 static void write_msg_to_buffer(buffer* write_buffer, const char* msg) {
@@ -459,7 +468,10 @@ static unsigned exit_write(struct selector_key *key) {
 
 static void on_close(const unsigned state, struct selector_key *key) {
     pctp* pctp_data = key->data;
-    if (pctp_data->client_fd >= 0) close(pctp_data->client_fd);
+    if (pctp_data->client_fd >= 0) {
+        close(pctp_data->client_fd);
+        selector_unregister_fd(key->s, pctp_data->client_fd);
+    }
     free(pctp_data);
     printf("Closed PCTP session.\n");
 }

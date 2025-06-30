@@ -180,6 +180,7 @@ static const struct parser_state_transition exit_parser_state_T_transitions[] = 
 
 static const struct parser_state_transition exit_parser_state_CR_transitions[] = {
     { .when = '\r', .dest = ST_EXIT_NL, .act1 = ignore }, 
+    { .when = '\n', .dest = ST_EXIT_DONE, .act1 = set_type_success }, 
     { .when = ANY, .dest = ST_EXIT_ERROR, .act1 = ignore }
 };
 
@@ -195,7 +196,7 @@ static const struct parser_state_transition exit_parser_state_ERROR_transitions[
     { .when = ANY, .dest = ST_EXIT_ERROR, .act1 = ignore }
 };
 
-static const size_t exit_parser_states_n[] = {2, 2, 2, 2, 2, 2, 0, 2};
+static const size_t exit_parser_states_n[] = {2, 2, 2, 2, 3, 2, 0, 2};
 
 static const struct parser_state_transition* exit_parser_state_transitions[] = {
     exit_parser_state_E_transitions,

@@ -4,6 +4,7 @@
 #include "../shared/netutils.h"
 #include "server_params.h"
 #include "socks5.h"
+#include "pctp.h"
 #include "server_config.h"
 #include <stdlib.h>
 #include <sys/socket.h>
@@ -55,9 +56,11 @@ static void accept_pctp(struct selector_key *key) {
         return;
     }
 
-    //pctp_init(client_fd, key->s);
-    printf("server ok: client connected to PCTP port\n");
-    close(client_fd);
+    if (pctp_init(client_fd, key->s, "postgres", "postgres") == -1){
+        close(client_fd);
+    } else {
+        printf("server ok: client connected to PCTP port\n");
+    }
 }
 
 int main(int argc, char** argv) {

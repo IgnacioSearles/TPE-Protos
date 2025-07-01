@@ -1,0 +1,13 @@
+PROXY CONFIGURATION and TRACKING PROTOCOL
+PCTP
+
+all commands must terminate in \n or \r\n
+
+login commands: (must be executed in that order)
+    USER [username]
+    PASS [password]
+
+main commands: (may be executed once logged in)
+    ADD ADMIN (followed by login commands with the new credentials)
+    ADD BASIC (followed by login commands with the new credentials)
+    EXIT

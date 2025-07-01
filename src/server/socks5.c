@@ -4,6 +4,10 @@
 #include <unistd.h>
 #include <sys/socket.h>
 
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0
+#endif
+
 #define VERSION_5 0x05
 #define METHOD_USER_PASS 0x02
 

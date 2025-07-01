@@ -7,6 +7,11 @@
 #include <string.h>
 #include <errno.h>
 
+// Includes para macOS
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0
+#endif
+
 #define OK_USER_MSG "+OK Please send password\n"
 #define OK_PASS_MSG "+OK Succesfully logged in\n"
 #define OK_DONE_MSG "+OK Done\n"

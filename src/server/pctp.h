@@ -13,6 +13,9 @@
 #define MAX_DATA_SIZE 256
 #define INITIAL_BUFFER_SIZE 4096
 
+#define DEFAULT_ADMIN_USER "postgres"
+#define DEFAULT_ADMIN_PASS "postgres"
+
 typedef struct pctp {
     server_config* config;
     int client_fd;

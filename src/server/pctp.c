@@ -31,7 +31,7 @@ enum pctp_states {
     MAIN_READ,
     MAIN_ERROR_WRITE,
     // STATS,
-    // ADD_USER,
+    // ADD_USER_WRITE,
     // CONFIG,
     EXIT_WRITE,
     DONE,
@@ -92,7 +92,7 @@ static const struct state_definition states[] = {
     { .state = MAIN_READ,                   .on_arrival = selector_set_interest_read, .on_read_ready = main_read },
     { .state = MAIN_ERROR_WRITE,            .on_arrival = selector_set_interest_write, .on_write_ready = main_error_write, .on_departure = reset_main_state },
     // { .state = STATS, },
-    // { .state = ADD_USER, },
+    // { .state = ADD_USER_WRITE,              .on_arrival = selector_set_interest_write, .on_write_ready = add_user_write},
     // { .state = CONFIG, },
     { .state = EXIT_WRITE,                  .on_arrival = selector_set_interest_write, .on_write_ready = exit_write },
     { .state = DONE,                        .on_arrival = on_close },
@@ -107,7 +107,7 @@ int pctp_init(const int client_fd, fd_selector selector, server_config* config) 
 
     pctp_data->config = config;
     if (config->user_count == 0) {
-        add_user(config, "postgres", "postgres", ADMIN);
+        add_user(config, DEFAULT_ADMIN_USER, DEFAULT_ADMIN_PASS, ADMIN);
     }
 
     pctp_data->client_fd = client_fd;

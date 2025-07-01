@@ -14,10 +14,13 @@
 
 #define OK_USER_MSG "+OK Please send password\n"
 #define OK_PASS_MSG "+OK Succesfully logged in\n"
+#define OK_ADD_MSG "+OK Please provide new user credentials\n"
+#define OK_ADD_PASS_MSG "+OK Succesfully added user\n"
 #define OK_DONE_MSG "+OK Done\n"
 #define ERR_INVALID_USER_MSG "-ERR Invalid username\n"
 #define ERR_INVALID_PASS_MSG "-ERR Invalid password\n"
 #define ERR_INVALID_COMMAND_MSG "-ERR Invalid command for current state\n"
+#define ERR_OOM_MSG "-ERR Out of memory\n"
 
 enum pctp_states {
     LOGIN_USER_READ,
@@ -31,7 +34,14 @@ enum pctp_states {
     MAIN_READ,
     MAIN_ERROR_WRITE,
     // STATS,
-    // ADD_USER_WRITE,
+    ADD_WRITE,
+    ADD_USER_READ,
+    ADD_USER_SUCCESS_WRITE,
+    ADD_USER_INVALID_WRITE,
+    ADD_USER_ERROR_WRITE,
+    ADD_PASS_READ,
+    ADD_PASS_SUCCESS_WRITE,
+    ADD_PASS_ERROR_WRITE,
     // CONFIG,
     EXIT_WRITE,
     DONE,
@@ -54,8 +64,24 @@ static unsigned login_pass_error_write(struct selector_key *key);
 
 static unsigned main_read(struct selector_key *key);
 static void reset_main_state(const unsigned state, struct selector_key *key);
+static void reset_add_state(const unsigned state, struct selector_key *key);
 
 static unsigned main_error_write(struct selector_key *key);
+
+static unsigned add_write(struct selector_key *key);
+
+static unsigned add_user_read(struct selector_key *key);
+static void reset_new_user_state(const unsigned state, struct selector_key *key);
+
+static unsigned add_user_success_write(struct selector_key *key);
+static unsigned add_user_invalid_write(struct selector_key *key);
+static unsigned add_user_error_write(struct selector_key *key);
+
+static unsigned add_pass_read(struct selector_key *key);
+static void reset_new_pass_state(const unsigned state, struct selector_key *key);
+
+static unsigned add_pass_success_write(struct selector_key *key);
+static unsigned add_pass_error_write(struct selector_key *key);
 
 static unsigned exit_write(struct selector_key *key);
 
@@ -68,8 +94,9 @@ static void pctp_read(struct selector_key *key);
 static void pctp_write(struct selector_key *key);
 static void pctp_close(struct selector_key *key);
 
-static int check_username(pctp* pctp_data);
-static int check_password(pctp* pctp_data);
+static int check_new_username(pctp* pctp_data);
+static int check_admin_username(pctp* pctp_data);
+static int check_admin_password(pctp* pctp_data);
 
 enum msg_send {
     MSG_SENT,
@@ -92,9 +119,16 @@ static const struct state_definition states[] = {
     { .state = MAIN_READ,                   .on_arrival = selector_set_interest_read, .on_read_ready = main_read },
     { .state = MAIN_ERROR_WRITE,            .on_arrival = selector_set_interest_write, .on_write_ready = main_error_write, .on_departure = reset_main_state },
     // { .state = STATS, },
-    // { .state = ADD_USER_WRITE,              .on_arrival = selector_set_interest_write, .on_write_ready = add_user_write},
+    { .state = ADD_WRITE,                   .on_arrival = selector_set_interest_write, .on_write_ready = add_write, .on_departure = reset_main_state },
+    { .state = ADD_USER_READ,               .on_arrival = selector_set_interest_read, .on_read_ready = add_user_read },
+    { .state = ADD_USER_SUCCESS_WRITE,      .on_arrival = selector_set_interest_write, .on_write_ready = add_user_success_write },
+    { .state = ADD_USER_INVALID_WRITE,      .on_arrival = selector_set_interest_write, .on_write_ready = add_user_invalid_write, .on_departure = reset_new_user_state },
+    { .state = ADD_USER_ERROR_WRITE,        .on_arrival = selector_set_interest_write, .on_write_ready = add_user_error_write, .on_departure = reset_new_user_state },
+    { .state = ADD_PASS_READ,               .on_arrival = selector_set_interest_read, .on_read_ready = add_pass_read },
+    { .state = ADD_PASS_SUCCESS_WRITE,      .on_arrival = selector_set_interest_write, .on_write_ready = add_pass_success_write },
+    { .state = ADD_PASS_ERROR_WRITE,        .on_arrival = selector_set_interest_write, .on_write_ready = add_pass_error_write, .on_departure = reset_new_pass_state },
     // { .state = CONFIG, },
-    { .state = EXIT_WRITE,                  .on_arrival = selector_set_interest_write, .on_write_ready = exit_write },
+    { .state = EXIT_WRITE,                  .on_arrival = selector_set_interest_write, .on_write_ready = exit_write, .on_departure = reset_main_state },
     { .state = DONE,                        .on_arrival = on_close },
     { .state = ERROR,                       .on_arrival = on_close },
 };
@@ -133,7 +167,7 @@ int pctp_init(const int client_fd, fd_selector selector, server_config* config) 
     pctp_data->user_parser = parser_init(parser_classes, &user_parser_def);
     pctp_data->pass_parser = parser_init(parser_classes, &pass_parser_def);
     // pctp_data->stats_parser = parser_init();
-    // pctp_data->add_user_parser = parser_init();
+    pctp_data->add_parser = parser_init(parser_no_classes(), &add_parser_def);
     // pctp_data->config_parser = parser_init();
     pctp_data->exit_parser = parser_init(parser_no_classes(), &exit_parser_def);
 
@@ -198,7 +232,7 @@ static unsigned login_user_read(struct selector_key *key) {
             printf("User parser succeded\n");
             printf("Username: %.*s\n", pctp_data->username_len, pctp_data->username);
 
-            pctp_data->id = check_username(pctp_data);
+            pctp_data->id = check_admin_username(pctp_data);
             if (pctp_data->id != -1) {
                 printf("Username is correct\n");
                 write_msg_to_buffer(&pctp_data->write_buffer, OK_USER_MSG);
@@ -249,7 +283,7 @@ static unsigned login_pass_read(struct selector_key *key) {
             printf("Pass parser succeded\n");
             printf("Password: %.*s\n", pctp_data->password_len, pctp_data->password);
 
-            int id = check_password(pctp_data);
+            int id = check_admin_password(pctp_data);
             if (id != -1) {
                 printf("Password is correct\n");
                 write_msg_to_buffer(&pctp_data->write_buffer, OK_PASS_MSG);
@@ -296,14 +330,29 @@ static unsigned main_read(struct selector_key *key) {
 
     while (buffer_can_read(read_buffer)) {
         uint8_t c = buffer_read(read_buffer);
+        const struct parser_event* add_event = parser_feed(pctp_data->add_parser, c);
         const struct parser_event* exit_event = parser_feed(pctp_data->exit_parser, c);
+        if (add_event->type == TYPE_BASIC) {
+            printf("Main parser succeded\n");
+            printf("Command: add basic\n");
+            pctp_data->level = BASIC;
+            write_msg_to_buffer(&pctp_data->write_buffer, OK_ADD_MSG);
+            return ADD_WRITE;
+        }
+        if (add_event->type == TYPE_ADMIN) {
+            printf("Main parser succeded\n");
+            printf("Command: add admin\n");
+            pctp_data->level = ADMIN;
+            write_msg_to_buffer(&pctp_data->write_buffer, OK_ADD_MSG);
+            return ADD_WRITE;
+        }
         if (exit_event->type == TYPE_SUCCESS) {
             printf("Main parser succeded\n");
             printf("Command: exit\n");
             write_msg_to_buffer(&pctp_data->write_buffer, OK_DONE_MSG);
             return EXIT_WRITE;
         }
-        if (exit_event->type == TYPE_ERROR) {
+        if (add_event->type == TYPE_ERROR && exit_event->type == TYPE_ERROR) {
             printf("Main parsers failed\n");
             write_msg_to_buffer(&pctp_data->write_buffer, ERR_INVALID_COMMAND_MSG);
             return MAIN_ERROR_WRITE;
@@ -315,10 +364,18 @@ static unsigned main_read(struct selector_key *key) {
 
 static void reset_main_state(const unsigned state, struct selector_key *key) {
     pctp* pctp_data = key->data;
+    reset_add_state(state, key);
     parser_reset(pctp_data->exit_parser);
 }
 
-static int check_username(pctp* pctp_data) {
+static void reset_add_state(const unsigned state, struct selector_key *key) {
+    pctp* pctp_data = key->data;
+    parser_reset(pctp_data->add_parser);
+    reset_new_user_state(state, key);
+    reset_new_pass_state(state, key);
+}
+
+static int check_admin_username(pctp* pctp_data) {
     for(int i=0; i<pctp_data->config->user_count; i++) {
         server_user user = pctp_data->config->users[i];
         if (user.role != ADMIN) continue;
@@ -329,7 +386,17 @@ static int check_username(pctp* pctp_data) {
     return -1;
 }
 
-static int check_password(pctp* pctp_data) {
+static int check_new_username(pctp* pctp_data) {
+    for(int i=0; i<pctp_data->config->user_count; i++) {
+        server_user user = pctp_data->config->users[i];
+        int name_len = strlen(user.user);
+        if (pctp_data->new_username_len == name_len && strncmp(pctp_data->new_username, user.user, name_len) == 0) 
+            return i;
+    }
+    return -1;
+}
+
+static int check_admin_password(pctp* pctp_data) {
     if (pctp_data->id == -1 || pctp_data->id >= pctp_data->config->user_count) return -1;
     server_user user = pctp_data->config->users[pctp_data->id];
     if (user.role != ADMIN) return -1;
@@ -456,6 +523,198 @@ static unsigned main_error_write(struct selector_key *key) {
         case MSG_SEND_ERROR: return ERROR;
     }
     return ERROR;
+}
+
+static unsigned add_write(struct selector_key *key) {
+    pctp *pctp_data = key->data;
+    buffer *write_buffer = &pctp_data->write_buffer;
+    int fd = pctp_data->client_fd;
+    int res = send_buffer_msg(fd, write_buffer);
+    switch (res) {
+        case MSG_SENT: return ADD_USER_READ;
+        case MSG_SEND_BLOCKED: return ADD_WRITE;
+        case MSG_SEND_ERROR: return ERROR;
+    }
+    return ERROR;
+}
+
+static unsigned add_user_read(struct selector_key *key) {
+    pctp *pctp_data = key->data;
+    buffer* read_buffer = &pctp_data->read_buffer;
+
+    size_t available = 0;
+    uint8_t* ptr = buffer_write_ptr(read_buffer, &available);
+    ssize_t n = recv(pctp_data->client_fd, ptr, available, MSG_NOSIGNAL);
+    if (n <= 0) {
+        return ADD_USER_READ;
+    }
+
+    buffer_write_adv(read_buffer, n);
+
+    printf("Received %ld bytes in ADD_USER_READ\n", n);
+
+    while (buffer_can_read(read_buffer)) {
+        uint8_t c = buffer_read(read_buffer);
+        const struct parser_event* e = parser_feed(pctp_data->user_parser, c);
+        if (e->type == TYPE_SUCCESS) {
+            printf("User parser succeded\n");
+            printf("Username: %.*s\n", pctp_data->new_username_len, pctp_data->new_username);
+
+            pctp_data->id = check_new_username(pctp_data);
+            if (pctp_data->id == -1) {
+                printf("New username is valid\n");
+                write_msg_to_buffer(&pctp_data->write_buffer, OK_USER_MSG);
+                return ADD_USER_SUCCESS_WRITE;
+            }
+            printf("Username already exists\n");
+            write_msg_to_buffer(&pctp_data->write_buffer, ERR_INVALID_USER_MSG);
+            return ADD_USER_INVALID_WRITE;
+        }
+        if (e->type == TYPE_ERROR) {
+            printf("User parser failed\n");
+            write_msg_to_buffer(&pctp_data->write_buffer, ERR_INVALID_COMMAND_MSG);
+            return ADD_USER_ERROR_WRITE;
+        }
+        if (e->type == TYPE_INPUT && pctp_data->new_username_len < MAX_DATA_SIZE) {
+            pctp_data->new_username[pctp_data->new_username_len++] = c;
+        }
+    }
+
+    return ADD_USER_READ;
+}
+
+static void reset_new_user_state(const unsigned state, struct selector_key *key) {
+    pctp* pctp_data = key->data;
+    parser_reset(pctp_data->user_parser);
+    pctp_data->new_username_len = 0;
+}
+
+static unsigned add_user_success_write(struct selector_key *key) {
+    pctp *pctp_data = key->data;
+    buffer *write_buffer = &pctp_data->write_buffer;
+    int fd = pctp_data->client_fd;
+    int res = send_buffer_msg(fd, write_buffer);
+    switch (res) {
+        case MSG_SENT: return ADD_PASS_READ;
+        case MSG_SEND_BLOCKED: return ADD_USER_SUCCESS_WRITE;
+        case MSG_SEND_ERROR: return ERROR;
+    }
+    return ERROR;
+}
+
+static unsigned add_user_invalid_write(struct selector_key *key) {
+    pctp *pctp_data = key->data;
+    buffer *write_buffer = &pctp_data->write_buffer;
+    int fd = pctp_data->client_fd;
+    int res = send_buffer_msg(fd, write_buffer);
+    switch (res) {
+        case MSG_SENT: return ADD_USER_READ;
+        case MSG_SEND_BLOCKED: return ADD_USER_INVALID_WRITE;
+        case MSG_SEND_ERROR: return ERROR;
+    }
+    return ERROR;
+}
+
+static unsigned add_user_error_write(struct selector_key *key) {
+    pctp *pctp_data = key->data;
+    buffer *write_buffer = &pctp_data->write_buffer;
+    int fd = pctp_data->client_fd;
+    int res = send_buffer_msg(fd, write_buffer);
+    switch (res) {
+        case MSG_SENT: return ADD_USER_READ;
+        case MSG_SEND_BLOCKED: return ADD_USER_ERROR_WRITE;
+        case MSG_SEND_ERROR: return ERROR;
+    }
+    return ERROR;
+}
+
+static unsigned add_pass_read(struct selector_key *key) {
+    pctp *pctp_data = key->data;
+    buffer* read_buffer = &pctp_data->read_buffer;
+
+    size_t available = 0;
+    uint8_t* ptr = buffer_write_ptr(read_buffer, &available);
+    ssize_t n = recv(pctp_data->client_fd, ptr, available, MSG_NOSIGNAL);
+    if (n <= 0) {
+        return ADD_PASS_READ;
+    }
+
+    buffer_write_adv(read_buffer, n);
+
+    printf("Received %ld bytes in ADD_PASS_READ\n", n);
+
+    while (buffer_can_read(read_buffer)) {
+        uint8_t c = buffer_read(read_buffer);
+        const struct parser_event* e = parser_feed(pctp_data->pass_parser, c);
+        if (e->type == TYPE_SUCCESS) {
+            printf("Pass parser succeded\n");
+            printf("Password: %.*s\n", pctp_data->new_password_len, pctp_data->new_password);
+            printf("Password set\n");
+            
+            char* new_user = malloc(sizeof(char) * (pctp_data->new_username_len+1));
+            char* new_pass = malloc(sizeof(char) * (pctp_data->new_password_len+1));
+            if (new_user == NULL || new_pass == NULL) {
+                free(new_user);
+                free(new_pass);
+                printf("Could not add credentials\n");
+                write_msg_to_buffer(&pctp_data->write_buffer, ERR_OOM_MSG);
+                return ADD_PASS_ERROR_WRITE;
+            }
+            strncpy(new_user, pctp_data->new_username, pctp_data->new_username_len);
+            new_user[pctp_data->new_username_len] = 0;
+
+            strncpy(new_pass, pctp_data->new_password, pctp_data->new_password_len);
+            new_pass[pctp_data->new_password_len] = 0;
+
+            add_user(pctp_data->config, new_user, new_pass, pctp_data->level);
+            printf("Added new user credentials\n");
+            write_msg_to_buffer(&pctp_data->write_buffer, OK_ADD_PASS_MSG);
+            return ADD_PASS_SUCCESS_WRITE;
+        }
+        if (e->type == TYPE_ERROR) {
+            printf("Pass parser failed\n");
+            write_msg_to_buffer(&pctp_data->write_buffer, ERR_INVALID_COMMAND_MSG);
+            return ADD_PASS_ERROR_WRITE;
+        }
+        if (e->type == TYPE_INPUT && pctp_data->new_password_len < MAX_DATA_SIZE) {
+            pctp_data->new_password[pctp_data->new_password_len++] = c;
+        }
+    }
+
+    return ADD_PASS_READ;
+}
+
+static void reset_new_pass_state(const unsigned state, struct selector_key *key) {
+    pctp* pctp_data = key->data;
+    parser_reset(pctp_data->pass_parser);
+    pctp_data->new_password_len = 0;
+}
+
+static unsigned add_pass_success_write(struct selector_key *key) {
+    pctp *pctp_data = key->data;
+    buffer *write_buffer = &pctp_data->write_buffer;
+    int fd = pctp_data->client_fd;
+    int res = send_buffer_msg(fd, write_buffer);
+    switch (res) {
+        case MSG_SENT: return MAIN_READ;
+        case MSG_SEND_BLOCKED: return ADD_PASS_SUCCESS_WRITE;
+        case MSG_SEND_ERROR: return ERROR;
+    }
+    return ERROR;
+}
+
+static unsigned add_pass_error_write(struct selector_key *key) {
+    pctp *pctp_data = key->data;
+    buffer *write_buffer = &pctp_data->write_buffer;
+    int fd = pctp_data->client_fd;
+    int res = send_buffer_msg(fd, write_buffer);
+    switch (res) {
+        case MSG_SENT: return ADD_PASS_READ;
+        case MSG_SEND_BLOCKED: return ADD_PASS_ERROR_WRITE;
+        case MSG_SEND_ERROR: return ERROR;
+    }
+    return ERROR;
+
 }
 
 static unsigned exit_write(struct selector_key *key) {

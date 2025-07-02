@@ -3,6 +3,7 @@
 #include "../shared/selector.h"
 #include "../shared/netutils.h"
 #include "server_params.h"
+#include "server_stats.h"
 #include "socks5.h"
 #include "pctp.h"
 #include "server_config.h"
@@ -19,11 +20,10 @@ void handle_shutdown(int sig) {
 }
 
 static server_config config;
+static server_stats socks5_server_stats;
 
 static void accept_socks5(struct selector_key *key) {
-    struct sockaddr_in client_addr;
-    socklen_t client_len = sizeof(client_addr);
-    int client_fd = accept(key->fd, (struct sockaddr *)&client_addr, &client_len);
+    int client_fd = accept(key->fd, NULL, NULL);
 
     if (client_fd < 0) {
         perror("server error: could not accept socks5 client");
@@ -36,20 +36,15 @@ static void accept_socks5(struct selector_key *key) {
         return;
     }
 
-    if (socks5_init(client_fd, key->s, &config) == -1) {
+    if (socks5_init(client_fd, key->s, &config, socks5_server_stats) < 0) {
         close(client_fd);
         perror("server error: could not initialize SOCKS5");
         return;
     }
-
-    // printf("server ok: client connected to socks5 port\n");
-    // close(client_fd);
 }
 
 static void accept_pctp(struct selector_key *key) {
-    struct sockaddr_in client_addr;
-    socklen_t client_len = sizeof(client_addr);
-    int client_fd = accept(key->fd, (struct sockaddr *)&client_addr, &client_len);
+    int client_fd = accept(key->fd, NULL, NULL);
 
     if (client_fd < 0) {
         perror("server error: could not accept PCTP client");
@@ -62,13 +57,11 @@ static void accept_pctp(struct selector_key *key) {
         return;
     }
 
-    if (pctp_init(client_fd, key->s, &config) == -1){
+    if (pctp_init(client_fd, key->s, &config, socks5_server_stats) < 0){
         close(client_fd);
         perror("server error: could not initialize PCTP");
         return;
     }
-
-    printf("server ok: client connected to PCTP port\n");
 }
 
 int main(int argc, char** argv) {
@@ -82,6 +75,12 @@ int main(int argc, char** argv) {
 
     signal(SIGINT, handle_shutdown);  // Ctrl+C
     signal(SIGTERM, handle_shutdown); // kill pid
+
+    socks5_server_stats = create_server_stats(); 
+    if (socks5_server_stats == NULL) {
+        perror("server error: failed to create stats collector for SOCKS5 server");
+        return EXIT_FAILURE;
+    }
 
     int socks5_socket = create_passive_tcp_socket(config.socks_addr, config.socks_port, MAX_SOCKS5_CONNECTIONS); 
     if (socks5_socket < 0) {
@@ -158,6 +157,7 @@ int main(int argc, char** argv) {
     close(socks5_socket);
     close(pctp_socket);
     selector_destroy(selector);
+    destroy_server_stats(socks5_server_stats);
     destroy_config(&config);
     return 0;
 }

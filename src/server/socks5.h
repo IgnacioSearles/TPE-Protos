@@ -5,6 +5,8 @@
 #include "../shared/buffer.h"
 #include "../shared/selector.h"
 #include "server_config.h"
+#include "server_stats.h"
+#include <netinet/in.h>
 
 #define INITIAL_BUFFER_SIZE 4096
 
@@ -33,12 +35,13 @@ typedef struct socks5 {
     uint8_t write_raw_buff[INITIAL_BUFFER_SIZE];
     
     server_config* config;
+    server_stats stats;
     
     uint8_t auth_method;
     bool auth_ok;
     
 } socks5;
 
-int socks5_init(const int client_fd, fd_selector s, server_config* config);
+int socks5_init(const int client_fd, fd_selector s, server_config* config, server_stats stats);
 
 #endif

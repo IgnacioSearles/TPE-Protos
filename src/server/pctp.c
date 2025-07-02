@@ -1,5 +1,6 @@
 #include "pctp.h"
 #include "ptctp_parser_tables.h"
+#include "server_stats.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -135,11 +136,12 @@ static const struct state_definition states[] = {
 
 static unsigned int parser_classes[0xFF] = {0};
 
-int pctp_init(const int client_fd, fd_selector selector, server_config* config) {
+int pctp_init(const int client_fd, fd_selector selector, server_config* config, server_stats stats) {
     pctp* pctp_data = malloc(sizeof(*pctp_data));
     if (pctp_data == NULL) return -1;
 
     pctp_data->config = config;
+    pctp_data->stats = stats;
     if (config->user_count == 0) {
         add_user(config, DEFAULT_ADMIN_USER, DEFAULT_ADMIN_PASS, ADMIN);
     }

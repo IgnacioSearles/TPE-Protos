@@ -3,6 +3,7 @@
 
 #include <netinet/in.h>
 #include <stdint.h>
+#include <sys/socket.h>
 
 #include "buffer.h"
 
@@ -30,6 +31,11 @@ int create_passive_tcp_socket(const char* ip_str, uint16_t port, uint32_t max_co
  * retorna el fd del socket si se realizo sin problmea
  * */
 int connect_to_host(const char *host, const char *port);
+
+/*
+ * Obtiene la dirección remota del socket
+ * */
+int get_socket_peer_address(int fd, struct sockaddr_storage *out_addr);
 
 #define SOCKADDR_TO_HUMAN_MIN (INET6_ADDRSTRLEN + 5 + 1)
 /**

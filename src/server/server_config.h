@@ -34,8 +34,10 @@ typedef struct {
 /*
  *  Agregar un usuario al servidor
  *
+ *  Retorna < 0 si no pudo agregar el usuario
+ *
  * */
-void add_user(server_config* config, char* user, char* pass, user_role role);
+int add_user(server_config* config, char* user, char* pass, user_role role);
 
 /*
  *  Crea la configuracion inicial se guarda en el stack, no hace malloc

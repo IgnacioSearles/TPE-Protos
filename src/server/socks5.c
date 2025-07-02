@@ -1,4 +1,5 @@
 #include "socks5.h"
+#include "server_stats.h"
 #include "socks5_protocol.h"
 #include "../shared/netutils.h"
 #include <stdlib.h>
@@ -22,10 +23,9 @@ static const struct fd_handler socks5_handler = {
     .handle_close = socks5_close,
 };
 
-int socks5_init(const int client_fd, fd_selector s, server_config* config) {
+int socks5_init(const int client_fd, fd_selector s, server_config* config, server_stats stats) {
     socks5* socks = calloc(1, sizeof(*socks));
     if (socks == NULL) {
-        close(client_fd);
         return -1;
     }
 
@@ -35,6 +35,7 @@ int socks5_init(const int client_fd, fd_selector s, server_config* config) {
     socks->state = HELLO_READ;
     socks->auth_ok = false;
     socks->auth_method = 0;
+    socks->stats = stats;
 
     buffer_init(&(socks->read_buffer), INITIAL_BUFFER_SIZE, socks->read_raw_buff);
     buffer_init(&(socks->write_buffer), INITIAL_BUFFER_SIZE, socks->write_raw_buff);
@@ -43,6 +44,8 @@ int socks5_init(const int client_fd, fd_selector s, server_config* config) {
         free(socks);
         return -1;
     }
+
+    log_connection_open(stats, client_fd);
 
     return 0;
 }
@@ -224,6 +227,8 @@ static void socks5_close(struct selector_key *key) {
         return;
     }
     
+    log_connection_close(socks->stats, socks->client_fd);
+
     if (socks->client_fd >= 0) {
         close(socks->client_fd);
     }

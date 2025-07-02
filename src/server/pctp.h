@@ -9,6 +9,7 @@
 #include "../shared/stm.h"
 #include "../shared/parser.h"
 #include "server_config.h"
+#include "server_stats.h"
 
 #define MAX_DATA_SIZE 256
 #define INITIAL_BUFFER_SIZE 4096
@@ -18,6 +19,8 @@
 
 typedef struct pctp {
     server_config* config;
+    server_stats stats;
+
     int client_fd;
 
     uint8_t read_raw_buff[INITIAL_BUFFER_SIZE];
@@ -53,6 +56,6 @@ typedef struct pctp {
 
 } pctp;
 
-int pctp_init(const int client_fd, fd_selector s, server_config* config);
+int pctp_init(const int client_fd, fd_selector s, server_config* config, server_stats stats);
 
 #endif

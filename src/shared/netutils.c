@@ -179,3 +179,8 @@ int connect_to_host(const char *host, const char *port) {
     freeaddrinfo(res);
     return -1;
 }
+
+int get_socket_peer_address(int fd, struct sockaddr_storage *out_addr) {
+    socklen_t len = sizeof(*out_addr);
+    return getpeername(fd, (struct sockaddr*)out_addr, &len);
+}

@@ -1,11 +1,16 @@
 #include "server_config.h"
 #include <stdlib.h>
 
-void add_user(server_config* config, char* user, char* pass, user_role role) {
+int add_user(server_config* config, char* user, char* pass, user_role role) {
+    if (config->user_count >= MAX_USERS)
+        return -1;
+
     config->users[config->user_count].user = user;
     config->users[config->user_count].pass = pass;
     config->users[config->user_count].role = role;
     config->user_count++;
+
+    return 0;
 }
 
 server_config create_config() {

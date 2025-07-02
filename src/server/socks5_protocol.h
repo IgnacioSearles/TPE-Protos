@@ -36,6 +36,8 @@
 #define AUTH_SUCCESS            0x00
 #define AUTH_FAILURE            0x01
 
+#define MAX_REQUEST_SIZE 262 // Tamaño máximo de un request según RFC 1928
+
 typedef struct {
     uint8_t version;
     uint8_t nmethods;

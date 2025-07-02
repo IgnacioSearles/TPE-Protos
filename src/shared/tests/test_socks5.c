@@ -6,6 +6,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <errno.h>
+#include <sys/select.h>
 
 void print_bytes(uint8_t* data, int len, const char* label) {
     printf("%s (%d bytes): ", label, len);
@@ -15,18 +16,16 @@ void print_bytes(uint8_t* data, int len, const char* label) {
     printf("\n");
 }
 
-int main() {
-    printf("🧪 Testing SOCKS5 Implementation\n");
-    printf("================================\n");
+int test_single_target(const char* host, int port) {
+    printf("🎯 Testing SOCKS5 connection to %s:%d\n", host, port);
+    printf("=====================================\n");
     
-    // Crear socket
     int sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
         perror("❌ socket");
-        return 1;
+        return -1;
     }
 
-    // Conectar al servidor
     struct sockaddr_in addr;
     addr.sin_family = AF_INET;
     addr.sin_port = htons(1080);
@@ -34,55 +33,51 @@ int main() {
 
     printf("🔌 Connecting to SOCKS5 server...\n");
     if (connect(sock, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-        perror("❌ connect");
+        perror("❌ connect to SOCKS5");
         close(sock);
-        return 1;
+        return -1;
     }
-    printf("✅ Connected to server\n\n");
+    printf("✅ Connected to SOCKS5 server\n");
 
-    // === FASE 1: HELLO ===
-    printf("📋 PHASE 1: HELLO Handshake\n");
-    printf("---------------------------\n");
-    
-    uint8_t hello[] = {0x05, 0x01, 0x02}; // version=5, nmethods=1, method=2
+    // HELLO
+    printf("\n📋 HELLO Phase\n");
+    uint8_t hello[] = {0x05, 0x01, 0x02};
     print_bytes(hello, sizeof(hello), "📤 Sending HELLO");
     
     if (send(sock, hello, sizeof(hello), 0) < 0) {
         perror("❌ send hello");
         close(sock);
-        return 1;
+        return -1;
     }
-
+    
     uint8_t hello_resp[2];
     if (recv(sock, hello_resp, sizeof(hello_resp), 0) < 0) {
         perror("❌ recv hello");
         close(sock);
-        return 1;
+        return -1;
     }
     print_bytes(hello_resp, sizeof(hello_resp), "📥 Received HELLO_REPLY");
-
+    
     if (hello_resp[0] != 0x05 || hello_resp[1] != 0x02) {
         printf("❌ HELLO failed: version=%d, method=%d\n", hello_resp[0], hello_resp[1]);
         close(sock);
-        return 1;
+        return -1;
     }
-    printf("✅ HELLO phase completed successfully\n\n");
+    printf("✅ HELLO phase successful\n");
 
-    // === FASE 2: AUTHENTICATION ===
-    printf("📋 PHASE 2: Authentication\n");
-    printf("--------------------------\n");
-    
+    // AUTH
+    printf("\n📋 AUTH Phase\n");
     char* user = "admin";
     char* pass = "password";
     uint8_t auth[256];
     int auth_len = 0;
     
-    auth[auth_len++] = 0x01;                    // version
-    auth[auth_len++] = strlen(user);            // username length
-    memcpy(auth + auth_len, user, strlen(user)); // username
+    auth[auth_len++] = 0x01;
+    auth[auth_len++] = strlen(user);
+    memcpy(auth + auth_len, user, strlen(user));
     auth_len += strlen(user);
-    auth[auth_len++] = strlen(pass);            // password length  
-    memcpy(auth + auth_len, pass, strlen(pass)); // password
+    auth[auth_len++] = strlen(pass);
+    memcpy(auth + auth_len, pass, strlen(pass));
     auth_len += strlen(pass);
 
     print_bytes(auth, auth_len, "📤 Sending AUTH");
@@ -90,83 +85,121 @@ int main() {
     if (send(sock, auth, auth_len, 0) < 0) {
         perror("❌ send auth");
         close(sock);
-        return 1;
+        return -1;
     }
-
+    
     uint8_t auth_resp[2];
     if (recv(sock, auth_resp, sizeof(auth_resp), 0) < 0) {
         perror("❌ recv auth");
         close(sock);
-        return 1;
+        return -1;
     }
     print_bytes(auth_resp, sizeof(auth_resp), "📥 Received AUTH_REPLY");
-
+    
     if (auth_resp[0] != 0x01 || auth_resp[1] != 0x00) {
         printf("❌ AUTH failed: version=%d, status=%d\n", auth_resp[0], auth_resp[1]);
         close(sock);
-        return 1;
+        return -1;
     }
-    printf("✅ Authentication phase completed successfully\n\n");
+    printf("✅ AUTH phase successful\n");
 
-    // === FASE 3: REQUEST (should fail) ===
-    printf("📋 PHASE 3: REQUEST (Testing Implementation Limit)\n");
-    printf("--------------------------------------------------\n");
+    // REQUEST
+    printf("\n📋 REQUEST Phase\n");
+    uint8_t request[262];
+    int req_len = 0;
     
-    uint8_t request[] = {
-        0x05, 0x01, 0x00, 0x01,  // VER, CMD=CONNECT, RSV, ATYP=IPv4
-        0x08, 0x08, 0x08, 0x08,  // IP: 8.8.8.8
-        0x00, 0x50               // Port: 80
-    };
+    request[req_len++] = 0x05; // VER
+    request[req_len++] = 0x01; // CMD=CONNECT
+    request[req_len++] = 0x00; // RSV
     
-    print_bytes(request, sizeof(request), "📤 Sending REQUEST");
+    // Usar dominio
+    printf("📍 Building domain request for: %s\n", host);
+    request[req_len++] = 0x03; // ATYP=DOMAIN
+    int host_len = strlen(host);
+    request[req_len++] = host_len;
+    memcpy(request + req_len, host, host_len);
+    req_len += host_len;
     
-    if (send(sock, request, sizeof(request), 0) < 0) {
+    // Puerto
+    uint16_t port_net = htons(port);
+    memcpy(request + req_len, &port_net, 2);
+    req_len += 2;
+    
+    print_bytes(request, req_len, "📤 Sending REQUEST");
+    
+    printf("⏳ Sending request...\n");
+    if (send(sock, request, req_len, 0) < 0) {
         perror("❌ send request");
         close(sock);
-        return 1;
+        return -1;
     }
+    printf("✅ Request sent successfully\n");
 
-    printf("⏳ Waiting for response or connection close...\n");
-    
-    // Intentar recibir respuesta con timeout
+    printf("⏰ Waiting for response (10s timeout)...\n");
     fd_set readfds;
     struct timeval timeout;
     FD_ZERO(&readfds);
     FD_SET(sock, &readfds);
-    timeout.tv_sec = 2;  // 2 segundos timeout
+    timeout.tv_sec = 10;
     timeout.tv_usec = 0;
     
     int result = select(sock + 1, &readfds, NULL, NULL, &timeout);
     
     if (result > 0) {
-        uint8_t request_resp[10];
-        ssize_t n = recv(sock, request_resp, sizeof(request_resp), 0);
+        uint8_t response[10];
+        ssize_t n = recv(sock, response, sizeof(response), 0);
         if (n > 0) {
-            print_bytes(request_resp, n, "📥 Received REQUEST_REPLY");
-            printf("⚠️  Server responded to REQUEST (unexpected)\n");
+            print_bytes(response, n, "📥 Received RESPONSE");
+            
+            if (n >= 2) {
+                uint8_t version = response[0];
+                uint8_t reply = response[1];
+                
+                printf("📊 Response: version=0x%02x, reply=0x%02x\n", version, reply);
+                
+                if (reply == 0x00) {
+                    printf("🎉 SUCCESS: Connection established to %s:%d!\n", host, port);
+                    close(sock);
+                    return 0;
+                } else {
+                    printf("❌ Connection failed with reply code 0x%02x\n", reply);
+                }
+            }
         } else if (n == 0) {
-            printf("🚧 Server closed connection after REQUEST (expected)\n");
-            printf("✅ This indicates REQUEST parsing is not yet implemented\n");
+            printf("🔌 Server closed connection\n");
         } else {
             printf("❌ Error reading response: %s\n", strerror(errno));
         }
     } else if (result == 0) {
-        printf("⏰ Timeout waiting for response\n");
-        printf("🚧 Server likely closed connection (expected behavior)\n");
-        printf("✅ This indicates REQUEST parsing is not yet implemented\n");
+        printf("⏰ TIMEOUT: No response received\n");
     } else {
         printf("❌ Select error: %s\n", strerror(errno));
     }
 
     close(sock);
+    return -1;
+}
+
+int main(int argc, char* argv[]) {
+    if (argc != 3) {
+        printf("Usage: %s <host> <port>\n", argv[0]);
+        printf("Example: %s google.com 80\n", argv[0]);
+        return 1;
+    }
     
-    printf("\n🎯 TEST SUMMARY\n");
-    printf("===============\n");
-    printf("✅ HELLO handshake: WORKING\n");
-    printf("✅ Authentication: WORKING\n");
-    printf("🚧 REQUEST parsing: NOT IMPLEMENTED (as expected)\n");
-    printf("\n🎉 SOCKS5 basic protocol implementation is functional!\n");
-    printf("📝 Next step: Implement REQUEST parsing and connection forwarding\n");
+    const char* host = argv[1];
+    int port = atoi(argv[2]);
     
-    return 0;
+    printf("🧪 Single Target SOCKS5 Test\n");
+    printf("============================\n\n");
+    
+    int result = test_single_target(host, port);
+    
+    if (result == 0) {
+        printf("\n🎉 Overall result: SUCCESS\n");
+    } else {
+        printf("\n💥 Overall result: FAILED\n");
+    }
+    
+    return result;
 }

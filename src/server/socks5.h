@@ -7,6 +7,7 @@
 #include "server_config.h"
 
 #define INITIAL_BUFFER_SIZE 4096
+#define MAX_DATA_SIZE 256
 
 typedef enum socks5_state {
     HELLO_READ,
@@ -20,11 +21,19 @@ typedef enum socks5_state {
     ERROR,
 } socks5_state;
 
+typedef struct {
+    uint8_t version;
+    uint8_t cmd;
+    uint8_t atyp;
+    char target_host[MAX_DATA_SIZE];
+    uint16_t target_port;
+} parsed_request;
+
 typedef struct socks5 {
     int client_fd;
     int origin_fd;
     
-    socks5_state state;  // Estado simple en lugar de STM
+    socks5_state state;
     
     buffer read_buffer;
     buffer write_buffer;
@@ -36,6 +45,10 @@ typedef struct socks5 {
     
     uint8_t auth_method;
     bool auth_ok;
+    
+    char target_host[MAX_DATA_SIZE];
+    uint16_t target_port;
+    uint8_t reply_code;
     
 } socks5;
 

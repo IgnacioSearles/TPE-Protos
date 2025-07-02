@@ -8,6 +8,11 @@
 #include <sys/socket.h>
 
 
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0
+#endif
+
+
 #include <arpa/inet.h>
 #include <unistd.h>
 

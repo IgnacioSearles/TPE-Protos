@@ -36,9 +36,14 @@ static void accept_socks5(struct selector_key *key) {
         return;
     }
 
-    //socks5_init(client_fd, key->s);
-    printf("server ok: client connected to socks5 port\n");
-    close(client_fd);
+    if (socks5_init(client_fd, key->s, &config) == -1) {
+        close(client_fd);
+        perror("server error: could not initialize SOCKS5");
+        return;
+    }
+
+    // printf("server ok: client connected to socks5 port\n");
+    // close(client_fd);
 }
 
 static void accept_pctp(struct selector_key *key) {

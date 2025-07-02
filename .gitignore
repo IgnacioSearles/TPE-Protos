@@ -5,3 +5,5 @@
 # OUTPUT FILES
 obj
 bin
+.log
+

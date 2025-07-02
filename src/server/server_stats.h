@@ -13,6 +13,8 @@ typedef enum {
 } auth_state;
 
 typedef struct {
+    int is_connection_active;
+
     struct sockaddr_storage client_addr;
     auth_state auth_success;
     

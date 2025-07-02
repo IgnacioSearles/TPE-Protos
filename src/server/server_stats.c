@@ -58,6 +58,7 @@ void log_connection_open(server_stats stats, int client_fd) {
     get_socket_peer_address(client_fd, &(log->entry.client_addr));
     log->entry.auth_success = AWAITING_AUTHENTICATION;
     log->entry.timestamp = time(NULL);
+    log->entry.is_connection_active = 1;
     log->fd = client_fd;
 
     stats->log_index = (stats->log_index + 1) % LOG_SIZE;
@@ -101,6 +102,7 @@ void log_connection_close(server_stats stats, int client_fd) {
 
     log->fd = CLOSED_FD_STATE;
     log->entry.auth_success = (log->entry.auth_success != AUTHENTICATED) ? NEVER_AUTHENTICATED : AUTHENTICATED;
+    log->entry.is_connection_active = 0;
 }
 
 uint64_t get_active_connection_count(server_stats stats) {

@@ -10,22 +10,22 @@
 socks5_state request_read(struct selector_key *key) {
     struct socks5* data = ATTACHMENT(key);
     
-    printf("REQUEST_READ: Reading connection request\n");
-    
     size_t count;
     uint8_t *ptr = buffer_write_ptr(&data->read_buffer, &count);
     ssize_t n = recv(key->fd, ptr, count, MSG_DONTWAIT);
+    
+    printf("REQUEST_READ: recv returned %ld (errno=%d)\n", n, errno);
     
     if (n > 0) {
         buffer_write_adv(&data->read_buffer, n);
         
         uint8_t *read_ptr = buffer_read_ptr(&data->read_buffer, &count);
+        printf("REQUEST_READ: Buffer has %zu bytes available\n", count);
         
         if (count >= SOCKS5_REQUEST_MIN_SIZE) {
             socks5_request_parser_result result = parse_socks5_request(read_ptr, count);
-            
             if (result.valid && count >= result.total_size) {
-                printf("REQUEST_READ: target='%s:%d', cmd=%d, atyp=%d\n", 
+                printf("REQUEST_READ: SUCCESS - target='%s:%d', cmd=%d, atyp=%d\n", 
                        result.target_host, result.target_port, result.cmd, result.atyp);
         
                 buffer_read_adv(&data->read_buffer, result.total_size);
@@ -46,13 +46,23 @@ socks5_state request_read(struct selector_key *key) {
                     return REQUEST_WRITE;
                 }
             } else if (!result.valid) {
-                printf("REQUEST_READ: Invalid request received\n");
-                return ERROR;
+                printf("REQUEST_READ: INVALID request - terminating\n");
+                data->reply_code = SOCKS5_REP_COMMAND_NOT_SUPPORTED;
+                return REQUEST_WRITE;
+            } else {
+                printf("REQUEST_READ: Need more data (have %zu, need %zu)\n", count, result.total_size);
             }
+        } else {
+            printf("REQUEST_READ: Need more data (have %zu, min %d)\n", count, SOCKS5_REQUEST_MIN_SIZE);
         }
+    } else if (n == 0) {
+        printf("REQUEST_READ: Client closed connection\n");
+        return DONE;
     } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
         printf("REQUEST_READ: Error reading: %s\n", strerror(errno));
         return ERROR;
+    } else {
+        printf("REQUEST_READ: Would block, waiting for more data\n");
     }
     
     return REQUEST_READ;

@@ -4,8 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
-
-struct server_config;
+#include "server_config.h"
 
 #define SOCKS5_VERSION 0x05
 #define AUTH_VERSION 0x01
@@ -127,7 +126,7 @@ typedef struct {
 } socks5_request_parser_result;
 
 socks5_hello_parser_result parse_socks5_hello(uint8_t* data, size_t data_len);
-socks5_auth_parser_result parse_socks5_auth(uint8_t* data, size_t data_len, struct server_config* config);
+socks5_auth_parser_result parse_socks5_auth(uint8_t* data, size_t data_len, server_config* config);
 socks5_request_parser_result parse_socks5_request(uint8_t* data, size_t data_len);
 
 #endif

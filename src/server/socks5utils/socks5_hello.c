@@ -3,6 +3,7 @@
 #include <buffer.h>
 #include <stdio.h>
 #include <errno.h>
+#include <string.h>
 #include <sys/socket.h>
 
 socks5_state hello_read(struct selector_key *key) {

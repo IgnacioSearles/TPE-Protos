@@ -3,6 +3,7 @@
 #include <buffer.h>
 #include <stdio.h>
 #include <errno.h>
+#include <string.h>
 #include <sys/socket.h>
 
 const struct fd_handler origin_handler = {

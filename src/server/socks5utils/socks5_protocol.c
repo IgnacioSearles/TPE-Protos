@@ -41,7 +41,7 @@ socks5_hello_parser_result parse_socks5_hello(uint8_t* data, size_t data_len) {
     result.version = data[0];
     result.nmethods = data[1];
     
-    if (data_len < 2 + result.nmethods) {
+    if (data_len < 2 + (size_t)result.nmethods) {
         return result;
     }
     
@@ -63,7 +63,7 @@ socks5_hello_parser_result parse_socks5_hello(uint8_t* data, size_t data_len) {
     return result;
 }
 
-socks5_auth_parser_result parse_socks5_auth(uint8_t* data, size_t data_len, struct server_config* config) {
+socks5_auth_parser_result parse_socks5_auth(uint8_t* data, size_t data_len, server_config* config) {
     socks5_auth_parser_result result = {0};
     
     if (data_len < SOCKS5_AUTH_MIN_SIZE) {
@@ -78,7 +78,7 @@ socks5_auth_parser_result parse_socks5_auth(uint8_t* data, size_t data_len, stru
     }
     
     // Verificar que tenemos username completo + plen
-    if (data_len < 2 + ulen + 1) {
+    if (data_len < 2 + (size_t)ulen + 1) {
         return result;
     }
     
@@ -87,7 +87,7 @@ socks5_auth_parser_result parse_socks5_auth(uint8_t* data, size_t data_len, stru
         return result;
     }
     
-    if (data_len < 2 + ulen + 1 + plen) {
+    if (data_len < 2 + (size_t)ulen + 1 + (size_t)plen) {
         return result;
     }
     

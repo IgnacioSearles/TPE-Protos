@@ -1,6 +1,8 @@
 # STUFF
+.cache
 .vscode
 .gdb_history
+compile_commands.json
 
 # OUTPUT FILES
 obj

@@ -2,7 +2,9 @@
 #include "../shared/netutils.h"
 #include <fcntl.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <sys/socket.h>
 #include <time.h>
 
 #define min(a, b) (((a) < (b)) ? (a) : (b))

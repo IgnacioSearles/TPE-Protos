@@ -29,10 +29,10 @@ static const struct state_definition client_statbl[] = {
     { .state = HELLO_READ,    .on_read_ready  = hello_read    },
     { .state = HELLO_WRITE,   .on_write_ready = hello_write   },
     { .state = AUTH_READ,     .on_read_ready  = auth_read     },
-    { .state = AUTH_WRITE,    .on_write_ready = auth_write    },
+    { .state = AUTH_WRITE,    .on_write_ready = auth_write    },  
     { .state = REQUEST_READ,  .on_read_ready  = request_read  },
     { .state = REQUEST_WRITE, .on_write_ready = request_write },
-    { .state = CONNECTING,    .on_write_ready = connecting    },
+    { .state = CONNECTING,    .on_write_ready = connecting    }, 
     { .state = COPY,          .on_arrival     = copy_on_arrival,
                               .on_read_ready  = copy_r,         // Cliente → Servidor remoto
                               .on_write_ready = copy_w          }, // Buffer → Cliente

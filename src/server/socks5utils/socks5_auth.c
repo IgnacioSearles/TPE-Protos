@@ -1,3 +1,4 @@
+#include "server_stats.h"
 #include <socks5_auth.h>
 #include <socks5_protocol.h>
 #include <server_config.h>
@@ -28,12 +29,13 @@ socks5_state auth_read(struct selector_key *key) {
                 printf("AUTH_READ: Parsed - user='%s'\n", result.username);
         
                 bool auth_ok = false;
-                if (data->config && data->config->users) {
+                if (data->config) {
                     bool found = false;
                     for (int i = 0; i < data->config->user_count && !found; i++) {
                         server_user user = data->config->users[i];
                         if (strcmp(user.user, result.username) == 0 && 
                             strcmp(user.pass, result.password) == 0) {
+                            log_user_authenticated(data->stats, data->client_fd, user.user);
                             auth_ok = true;
                             printf("AUTH_READ: Credentials match user[%d]\n", i);
                             found = true;

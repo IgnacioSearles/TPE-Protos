@@ -1,3 +1,4 @@
+#include "server_stats.h"
 #include <socks5_request.h>
 #include <socks5_protocol.h>
 #include <netutils.h>
@@ -37,6 +38,7 @@ socks5_state request_read(struct selector_key *key) {
                 data->origin_fd = connect_to_host(data->target_host, port_str);
                 
                 if (data->origin_fd >= 0) {
+                    log_client_connected_to_destination_server(data->stats, data->client_fd, data->origin_fd);
                     printf("REQUEST_READ: Connection initiated to %s:%d (fd=%d)\n", data->target_host, data->target_port, data->origin_fd);
                     data->reply_code = SOCKS5_REP_SUCCESS;
                     return CONNECTING;

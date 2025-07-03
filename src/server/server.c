@@ -14,13 +14,13 @@
 #define MAX_PCTP_CONNECTIONS 24
 #define MAX_CONNECTIONS (MAX_SOCKS5_CONNECTIONS + MAX_PCTP_CONNECTIONS)
 
+static server_config config;
+static server_stats socks5_server_stats;
+
 static volatile bool done = false;
 void handle_shutdown(int sig) {
     done = true;
 }
-
-static server_config config;
-static server_stats socks5_server_stats;
 
 static void accept_socks5(struct selector_key *key) {
     int client_fd = accept(key->fd, NULL, NULL);

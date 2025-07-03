@@ -1,4 +1,5 @@
 #include <socks5_copy.h>
+#include <selector.h>
 #include <buffer.h>
 #include <stdio.h>
 #include <errno.h>
@@ -69,10 +70,20 @@ socks5_state copy_w(struct selector_key *key) {
         if (n > 0) {
             buffer_read_adv(&data->write_buffer, n);
             printf("COPY_W: Sent %ld bytes to client from buffer\n", n);
+            
+            size_t remaining;
+            buffer_read_ptr(&data->write_buffer, &remaining);
+            if (remaining == 0) {
+                printf("COPY_W: All buffered data sent - back to read mode\n");
+                selector_set_interest_key(key, OP_READ);
+            }
         } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
             printf("COPY_W: Error writing to client: %s\n", strerror(errno));
             return ERROR;
         }
+    } else {
+        printf("COPY_W: No pending data to send\n");
+        selector_set_interest_key(key, OP_READ);
     }
     
     return COPY;
@@ -103,17 +114,26 @@ void origin_read(struct selector_key *key) {
             } else if (sent < 0) {
                 printf("ORIGIN_READ: Error sending to client: %s\n", strerror(errno));
                 selector_unregister_fd(key->s, key->fd);
-                selector_unregister_fd(key->s, data->client_fd);
                 return;
             }
         }
     } else if (n == 0) {
-        printf("ORIGIN_READ: Remote server closed connection - cleaning up\n");
+        printf("ORIGIN_READ: Remote server closed connection\n");
+        
+        size_t pending_count;
+        buffer_read_ptr(&data->write_buffer, &pending_count);
+        
+        if (pending_count > 0) {
+            printf("ORIGIN_READ: %zu bytes pending for client - keeping connection\n", pending_count);
+            selector_set_interest(key->s, data->client_fd, OP_WRITE);
+        } else {
+            printf("ORIGIN_READ: No pending data - closing client connection\n");
+            selector_unregister_fd(key->s, data->client_fd);
+        }
+        
         selector_unregister_fd(key->s, key->fd);
-        selector_unregister_fd(key->s, data->client_fd);
     } else if (errno != EAGAIN && errno != EWOULDBLOCK) {
         printf("ORIGIN_READ: Error reading from origin: %s\n", strerror(errno));
         selector_unregister_fd(key->s, key->fd);
-        selector_unregister_fd(key->s, data->client_fd);
     }
 }

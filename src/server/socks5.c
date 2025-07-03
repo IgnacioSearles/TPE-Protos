@@ -34,60 +34,21 @@ static void socks5_write(struct selector_key *key);
 static void socks5_close(struct selector_key *key);
 
 static void origin_read(struct selector_key *key);
-static void origin_close(struct selector_key *key);
 
-// Definición de la máquina de estados
 static const struct state_definition client_statbl[] = {
-    { .state = HELLO_READ, .on_read_ready = hello_read},
-    { .state = HELLO_WRITE, .on_write_ready = hello_write},
-    {
-        .state            = AUTH_READ,
-        .on_read_ready    = auth_read,
-    },{
-        .state            = AUTH_WRITE,
-        .on_arrival       = NULL,
-        .on_departure     = NULL,
-        .on_read_ready    = NULL,
-        .on_write_ready   = auth_write,
-    },{
-        .state            = REQUEST_READ,
-        .on_arrival       = NULL,
-        .on_departure     = NULL,
-        .on_read_ready    = request_read,
-        .on_write_ready   = NULL,
-    },{
-        .state            = REQUEST_WRITE,
-        .on_arrival       = NULL,
-        .on_departure     = NULL,
-        .on_read_ready    = NULL,
-        .on_write_ready   = request_write,
-    },{
-        .state            = CONNECTING,
-        .on_arrival       = NULL,
-        .on_departure     = NULL,
-        .on_read_ready    = NULL,
-        .on_write_ready   = connecting,
-    },{
-        .state            = COPY,
-        .on_arrival       = copy_on_arrival,
-        .on_departure     = NULL,
-        .on_read_ready = copy_r,  // Cliente -> Servidor remoto
-        .on_write_ready = copy_w, // Buffer -> Cliente
-    },{
-        .state            = DONE,
-        .on_arrival       = NULL,
-        .on_departure     = NULL,
-        .on_read_ready    = NULL,
-        .on_write_ready   = NULL,
-    },{
-        .state            = ERROR,
-        .on_arrival       = NULL,
-        .on_departure     = NULL,
-        .on_read_ready    = NULL,
-        .on_write_ready   = NULL,
-    }
+    { .state = HELLO_READ,    .on_read_ready  = hello_read    },
+    { .state = HELLO_WRITE,   .on_write_ready = hello_write   },
+    { .state = AUTH_READ,     .on_read_ready  = auth_read     },
+    { .state = AUTH_WRITE,    .on_write_ready = auth_write    },
+    { .state = REQUEST_READ,  .on_read_ready  = request_read  },
+    { .state = REQUEST_WRITE, .on_write_ready = request_write },
+    { .state = CONNECTING,    .on_write_ready = connecting    },
+    { .state = COPY,          .on_arrival     = copy_on_arrival,
+                              .on_read_ready  = copy_r,         // Cliente → Servidor remoto
+                              .on_write_ready = copy_w          }, // Buffer → Cliente
+    { .state = DONE   },
+    { .state = ERROR  }
 };
-
 
 static const struct fd_handler socks5_handler = {
     .handle_read  = socks5_read,
@@ -97,12 +58,11 @@ static const struct fd_handler socks5_handler = {
 
 static const struct fd_handler origin_handler = {
     .handle_read  = origin_read,
-    .handle_close = origin_close,
 };
 
 static const struct state_machine socks5_stm = {
     .initial   = HELLO_READ,
-    .max_state = ERROR,  // El último estado del enum
+    .max_state = ERROR,
     .states    = client_statbl,
 };
 
@@ -136,30 +96,15 @@ static socks5_state hello_read(struct selector_key *key) {
         uint8_t *read_ptr = buffer_read_ptr(&data->read_buffer, &count);
         printf("SOCKS5: Processing HELLO_READ (available: %zu)\n", count);
         
-        if (count >= 3) {
-            // TODO parsing con socks5_protocol.h
-            uint8_t version = read_ptr[0];
-            uint8_t nmethods = read_ptr[1];
+        if (count >= SOCKS5_HELLO_MIN_SIZE) {
+            socks5_hello_parser_result result = parse_socks5_hello(read_ptr, count);
             
-            printf("SOCKS5: HELLO version=%d, nmethods=%d\n", version, nmethods);
-            
-            if (version == SOCKS5_VERSION && count >= 2 + nmethods) {
-                printf("SOCKS5: Available methods: ");
-                for (int i = 0; i < nmethods; i++) {
-                    printf("%d ", read_ptr[2 + i]);
-                }
-                printf("\n");
-                buffer_read_adv(&data->read_buffer, 2 + nmethods);
-
-                bool supports_userpass = false;
-                for (int i = 0; i < nmethods; i++) {
-                    if (read_ptr[2 + i] == AUTH_METHOD_USER_PASS) {
-                        supports_userpass = true;
-                        break;
-                    }
-                }
+            if (result.valid) {
+                printf("SOCKS5: HELLO version=%d, nmethods=%d\n", result.version, result.nmethods);
+                printf("SOCKS5: Supports user/pass: %s\n", result.supports_userpass ? "YES" : "NO");
                 
-                data->auth_method = supports_userpass ? AUTH_METHOD_USER_PASS : AUTH_METHOD_NO_METHODS;
+                buffer_read_adv(&data->read_buffer, 2 + result.nmethods);
+                data->auth_method = result.selected_method;
                 
                 printf("SOCKS5: HELLO parsed successfully, selected method: %d\n", data->auth_method);
                 
@@ -179,12 +124,10 @@ static socks5_state hello_write(struct selector_key *key) {
     
     printf("SOCKS5: Processing HELLO_WRITE\n");
     
-    // TODO usar parsing de socks5_protocol.h
-    uint8_t response[2];
-    response[0] = SOCKS5_VERSION;
-    response[1] = data->auth_method;
+    // 🏗️ Crear respuesta usando protocolo en lugar de array manual
+    socks5_hello_response response = create_hello_response(data->auth_method);
     
-    ssize_t n = send(key->fd, response, sizeof(response), MSG_NOSIGNAL | MSG_DONTWAIT);
+    ssize_t n = send(key->fd, &response, sizeof(response), MSG_NOSIGNAL | MSG_DONTWAIT);
     
     if (n > 0) {
         printf("SOCKS5: Sent HELLO_REPLY successfully (method=%d, bytes=%ld)\n", data->auth_method, n);
@@ -211,7 +154,6 @@ static socks5_state auth_read(struct selector_key *key) {
     struct socks5* data = ATTACHMENT(key);
     
     size_t count;
-
     uint8_t* ptr = buffer_write_ptr(&data->read_buffer, &count);
     ssize_t n = recv(key->fd, ptr, count, MSG_DONTWAIT);
     
@@ -219,45 +161,34 @@ static socks5_state auth_read(struct selector_key *key) {
         buffer_write_adv(&data->read_buffer, n);
         
         uint8_t* read_ptr = buffer_read_ptr(&data->read_buffer, &count);
-        if (count >= 2) {
-            // TODO parsing con socks5_protocol.h
-            uint8_t version = read_ptr[0];
-            uint8_t ulen = read_ptr[1];
+        
+        if (count >= SOCKS5_AUTH_MIN_SIZE) {
+            socks5_auth_parser_result result = parse_socks5_auth(read_ptr, count, data->config);
             
-            if (version == AUTH_VERSION && ulen > 0 && count >= 2 + ulen + 1) {
-                uint8_t plen = read_ptr[2 + ulen];
-
-                if (plen > 0 && count >= 2 + ulen + 1 + plen) {
-                    buffer_read_adv(&data->read_buffer, 2); // version + ulen
-                    
-                    char username[MAX_DATA_SIZE];
-                    for (int i = 0; i < ulen; i++) {
-                        username[i] = buffer_read(&data->read_buffer);
-                    }
-                    username[ulen] = '\0';
-                    
-                    plen = buffer_read(&data->read_buffer);
-                    char password[MAX_DATA_SIZE];
-                    for (int i = 0; i < plen; i++) {
-                        password[i] = buffer_read(&data->read_buffer);
-                    }
-                    password[plen] = '\0';
-                    
-                    data->auth_ok = false;
-                    if (data->config && data->config->users) {
-                        bool found = false;
-                        for (int i = 0; i < data->config->user_count && !found; i++) {
-                            server_user user = data->config->users[i];
-                            if (strcmp(user.user, username) == 0 && strcmp(user.pass, password) == 0) {
-                                data->auth_ok = true;
-                                found = true;
-                            }
+            if (result.valid) {
+                printf("SOCKS5: AUTH parsed - user='%s'\n", result.username);
+        
+                bool auth_ok = false;
+                if (data->config && data->config->users) {
+                    bool found = false;
+                    for (int i = 0; i < data->config->user_count && !found; i++) {
+                        server_user user = data->config->users[i];
+                        if (strcmp(user.user, result.username) == 0 && 
+                            strcmp(user.pass, result.password) == 0) {
+                            auth_ok = true;
+                            found = true;
                         }
                     }
-                    return AUTH_WRITE;
                 }
-            } else if (version != AUTH_VERSION) {
-                return ERROR;
+                
+                printf("SOCKS5: Authentication result: %s\n", auth_ok ? "SUCCESS" : "FAILED");
+                
+                size_t consumed = 2 + strlen(result.username) + 1 + strlen(result.password);
+                buffer_read_adv(&data->read_buffer, consumed);
+                
+                data->auth_ok = auth_ok;
+                
+                return AUTH_WRITE;
             }
         }
     } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
@@ -306,7 +237,6 @@ static socks5_state request_read(struct selector_key *key) {
     struct socks5* data = ATTACHMENT(key);
     
     size_t count;
-
     uint8_t *ptr = buffer_write_ptr(&data->read_buffer, &count);
     ssize_t n = recv(key->fd, ptr, count, MSG_DONTWAIT);
     
@@ -314,55 +244,31 @@ static socks5_state request_read(struct selector_key *key) {
         buffer_write_adv(&data->read_buffer, n);
         
         uint8_t *read_ptr = buffer_read_ptr(&data->read_buffer, &count);
-        if (count >= 6) { // Mínimo para una request válida
-            if (read_ptr[0] == SOCKS5_VERSION && read_ptr[1] == SOCKS5_CMD_CONNECT) {
-                // TODO parsing con socks5_protocol.h
-                size_t req_size = 6; // VER + CMD + RSV + ATYP + 2 bytes puerto mínimo
-                uint8_t atyp = read_ptr[3];
+        
+        if (count >= SOCKS5_REQUEST_MIN_SIZE) {
+            socks5_request_parser_result result = parse_socks5_request(read_ptr, count);
+            
+            if (result.valid && count >= result.total_size) {
+                printf("SOCKS5: REQUEST parsed - target='%s:%d', cmd=%d, atyp=%d\n", result.target_host, result.target_port, result.cmd, result.atyp);
+        
+                buffer_read_adv(&data->read_buffer, result.total_size);
                 
-                if (atyp == SOCKS5_ATYP_IPV4) {
-                    req_size = 4 + 4 + 2; // header + ipv4 + puerto
-                } else if (atyp == SOCKS5_ATYP_DOMAIN) {
-                    if (count >= 5) {
-                        uint8_t domain_len = read_ptr[4];
-                        req_size = 4 + 1 + domain_len + 2; // header + len + domain + puerto
-                    }
-                }
+                strcpy(data->target_host, result.target_host);
+                data->target_port = result.target_port;
                 
-                if (count >= req_size) {
-                    buffer_read_adv(&data->read_buffer, 4); // VER + CMD + RSV + ATYP
-                    
-                    if (atyp == SOCKS5_ATYP_DOMAIN) {
-                        uint8_t domain_len = buffer_read(&data->read_buffer);
-                        for (int i = 0; i < domain_len; i++) {
-                            data->target_host[i] = buffer_read(&data->read_buffer);
-                        }
-                        data->target_host[domain_len] = '\0';
-                    } else if (atyp == SOCKS5_ATYP_IPV4) {
-                        uint8_t ip[4];
-                        for (int i = 0; i < 4; i++) {
-                            ip[i] = buffer_read(&data->read_buffer);
-                        }
-                        sprintf(data->target_host, "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
-                    }
-                    
-                    uint8_t port_high = buffer_read(&data->read_buffer);
-                    uint8_t port_low = buffer_read(&data->read_buffer);
-                    data->target_port = (port_high << 8) | port_low;
-                    
-                    char port_str[6];
-                    snprintf(port_str, sizeof(port_str), "%d", data->target_port);
-                    data->origin_fd = connect_to_host(data->target_host, port_str);
-                    
-                    if (data->origin_fd >= 0) {
-                        data->reply_code = SOCKS5_REP_SUCCESS;
-                        return CONNECTING;
-                    } else {
-                        data->reply_code = SOCKS5_REP_HOST_UNREACH;
-                        return REQUEST_WRITE;
-                    }
+                char port_str[6];
+                snprintf(port_str, sizeof(port_str), "%d", data->target_port);
+                data->origin_fd = connect_to_host(data->target_host, port_str);
+                
+                if (data->origin_fd >= 0) {
+                    data->reply_code = SOCKS5_REP_SUCCESS;
+                    return CONNECTING;
+                } else {
+                    data->reply_code = SOCKS5_REP_HOST_UNREACH;
+                    return REQUEST_WRITE;
                 }
-            } else {
+            } else if (!result.valid) {
+                printf("SOCKS5: Invalid request received\n");
                 return ERROR;
             }
         }
@@ -570,7 +476,7 @@ static void socks5_write(struct selector_key *key) {
         } else if (is_op_write(next)) {
             interest = OP_WRITE;
         }
-        
+
         if (interest != OP_NOOP) {
             printf("SOCKS5: Changing selector interest to %d\n", interest);
             selector_set_interest_key(key, interest);
@@ -633,9 +539,4 @@ static void origin_read(struct selector_key *key) {
         selector_unregister_fd(key->s, key->fd);
         selector_unregister_fd(key->s, data->client_fd);
     }
-}
-
-static void origin_close(struct selector_key *key) {
-    printf("SOCKS5: Origin close event - cleanup handled by origin_read\n");
-    // El cleanup ya fue manejado en origin_read, no hacer nada más aquí
 }

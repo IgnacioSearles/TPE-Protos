@@ -84,4 +84,7 @@ uint64_t get_current_connections_bytes_proxied(server_stats stats);
  * */
 void destroy_server_stats(server_stats stats);
 
+// TODO: destroy this debug thing
+void print_stats(server_stats stats);
+
 #endif

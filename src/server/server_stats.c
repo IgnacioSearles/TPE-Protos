@@ -2,7 +2,9 @@
 #include "../shared/netutils.h"
 #include <fcntl.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <sys/socket.h>
 #include <time.h>
 
 #define min(a, b) (((a) < (b)) ? (a) : (b))
@@ -145,4 +147,16 @@ server_connection_entry* get_next_server_connection_entry(server_stats stats) {
 
 void destroy_server_stats(server_stats stats) {
     free(stats);
+}
+
+void print_stats(server_stats stats) {
+    for (int64_t i = stats->log_index - 1; i >= 0; i--) {
+        server_connection_entry entry = stats->log[i].entry;
+        printf("user: %s\n", entry.user);
+        printf("proxied bytes: %ld\n", entry.bytes_proxied);
+
+        char buff[500];
+        sockaddr_to_human(buff, 500, (struct sockaddr*)&entry.dest_addr);
+        printf("destination ip: %s\n", buff);
+    }
 }

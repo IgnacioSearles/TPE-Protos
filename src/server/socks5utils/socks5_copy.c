@@ -1,3 +1,4 @@
+#include "server_stats.h"
 #include <socks5_copy.h>
 #include <selector.h>
 #include <buffer.h>
@@ -40,6 +41,7 @@ socks5_state copy_r(struct selector_key *key) {
         if (count > 0) {
             ssize_t sent = send(data->origin_fd, read_ptr, count, MSG_NOSIGNAL);
             if (sent > 0) {
+                log_bytes_proxied(data->stats, data->client_fd, sent);
                 buffer_read_adv(&data->read_buffer, sent);
                 printf("COPY_R: Forwarded %ld bytes to origin\n", sent);
             } else if (sent < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
@@ -69,6 +71,8 @@ socks5_state copy_w(struct selector_key *key) {
     if (count > 0) {
         ssize_t n = send(key->fd, ptr, count, MSG_NOSIGNAL | MSG_DONTWAIT);
         if (n > 0) {
+            log_bytes_proxied(data->stats, data->client_fd, n);
+
             buffer_read_adv(&data->write_buffer, n);
             printf("COPY_W: Sent %ld bytes to client from buffer\n", n);
             
@@ -107,6 +111,8 @@ void origin_read(struct selector_key *key) {
         if (count > 0) {
             ssize_t sent = send(data->client_fd, read_ptr, count, MSG_NOSIGNAL | MSG_DONTWAIT);
             if (sent > 0) {
+                log_bytes_proxied(data->stats, data->client_fd, sent);
+
                 buffer_read_adv(&data->write_buffer, sent);
                 printf("ORIGIN_READ: Forwarded %ld bytes to client immediately\n", sent);
             } else if (sent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {

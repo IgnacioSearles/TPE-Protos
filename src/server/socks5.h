@@ -18,6 +18,7 @@ typedef enum socks5_state {
     AUTH_WRITE,
     REQUEST_READ,
     REQUEST_WRITE,
+    CONNECTING,
     COPY,
     DONE,
     ERROR,
@@ -36,6 +37,7 @@ typedef struct socks5 {
     int origin_fd;
     
     socks5_state state;
+    struct state_machine stm;
     
     buffer read_buffer;
     buffer write_buffer;

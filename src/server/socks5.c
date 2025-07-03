@@ -11,13 +11,83 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
+#define MAX_DATA_SIZE 256
+
 #ifndef MSG_NOSIGNAL
 #define MSG_NOSIGNAL 0
 #endif
 
+static void copy_on_arrival(const unsigned state, struct selector_key *key);
+
+static socks5_state hello_read(struct selector_key *key);
+static socks5_state hello_write(struct selector_key *key);
+static socks5_state auth_read(struct selector_key *key);
+static socks5_state auth_write(struct selector_key *key);
+static socks5_state request_read(struct selector_key *key);
+static socks5_state request_write(struct selector_key *key);
+static socks5_state connecting(struct selector_key *key);
+static socks5_state copy_r(struct selector_key *key);
+static socks5_state copy_w(struct selector_key *key);
+
 static void socks5_read(struct selector_key *key);
 static void socks5_write(struct selector_key *key);
 static void socks5_close(struct selector_key *key);
+
+static void origin_read(struct selector_key *key);
+static void origin_close(struct selector_key *key);
+
+// Definición de la máquina de estados
+static const struct state_definition client_statbl[] = {
+    { .state = HELLO_READ, .on_read_ready = hello_read},
+    { .state = HELLO_WRITE, .on_write_ready = hello_write},
+    {
+        .state            = AUTH_READ,
+        .on_read_ready    = auth_read,
+    },{
+        .state            = AUTH_WRITE,
+        .on_arrival       = NULL,
+        .on_departure     = NULL,
+        .on_read_ready    = NULL,
+        .on_write_ready   = auth_write,
+    },{
+        .state            = REQUEST_READ,
+        .on_arrival       = NULL,
+        .on_departure     = NULL,
+        .on_read_ready    = request_read,
+        .on_write_ready   = NULL,
+    },{
+        .state            = REQUEST_WRITE,
+        .on_arrival       = NULL,
+        .on_departure     = NULL,
+        .on_read_ready    = NULL,
+        .on_write_ready   = request_write,
+    },{
+        .state            = CONNECTING,
+        .on_arrival       = NULL,
+        .on_departure     = NULL,
+        .on_read_ready    = NULL,
+        .on_write_ready   = connecting,
+    },{
+        .state            = COPY,
+        .on_arrival       = copy_on_arrival,
+        .on_departure     = NULL,
+        .on_read_ready = copy_r,  // Cliente -> Servidor remoto
+        .on_write_ready = copy_w, // Buffer -> Cliente
+    },{
+        .state            = DONE,
+        .on_arrival       = NULL,
+        .on_departure     = NULL,
+        .on_read_ready    = NULL,
+        .on_write_ready   = NULL,
+    },{
+        .state            = ERROR,
+        .on_arrival       = NULL,
+        .on_departure     = NULL,
+        .on_read_ready    = NULL,
+        .on_write_ready   = NULL,
+    }
+};
+
 
 static const struct fd_handler socks5_handler = {
     .handle_read  = socks5_read,
@@ -25,417 +95,491 @@ static const struct fd_handler socks5_handler = {
     .handle_close = socks5_close,
 };
 
-// Función para conectar al servidor destino
-static int connect_to_target(const char* host, uint16_t port) {
-    printf("SOCKS5: Connecting to %s:%d\n", host, port);
+static const struct fd_handler origin_handler = {
+    .handle_read  = origin_read,
+    .handle_close = origin_close,
+};
+
+static const struct state_machine socks5_stm = {
+    .initial   = HELLO_READ,
+    .max_state = ERROR,  // El último estado del enum
+    .states    = client_statbl,
+};
+
+#define ATTACHMENT(key) ((struct socks5 *)(key)->data)
+
+static void copy_on_arrival(const unsigned state, struct selector_key *key) {
+    struct socks5* data = ATTACHMENT(key);
     
-    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if (sockfd < 0) {
-        printf("SOCKS5: Failed to create socket: %s\n", strerror(errno));
-        return -1;
-    }
-
-    struct sockaddr_in addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(port);
-
-    // Intentar convertir como IP primero
-    if (inet_pton(AF_INET, host, &addr.sin_addr) <= 0) {
-        // Si no es IP, resolver hostname
-        printf("SOCKS5: Resolving hostname %s...\n", host);
-        struct hostent *he = gethostbyname(host);
-        if (he == NULL) {
-            printf("❌ SOCKS5: Failed to resolve %s: ", host);
-            switch (h_errno) {
-                case HOST_NOT_FOUND:
-                    printf("Host not found\n");
-                    break;
-                case NO_DATA:
-                    printf("No address associated with hostname\n");
-                    break;
-                case NO_RECOVERY:
-                    printf("Non-recoverable name server error\n");
-                    break;
-                case TRY_AGAIN:
-                    printf("Temporary failure in name resolution\n");
-                    break;
-                default:
-                    printf("Unknown error (%d)\n", h_errno);
-                    break;
-            }
-            close(sockfd);
-            return -1;
-        }
-        
-        if (he->h_addr_list == NULL || he->h_addr_list[0] == NULL) {
-            printf("SOCKS5: No addresses found for %s\n", host);
-            close(sockfd);
-            return -1;
-        }
-        
-        printf("SOCKS5: Resolved %s to %s\n", host, inet_ntoa(*((struct in_addr*)he->h_addr_list[0])));
-        memcpy(&addr.sin_addr, he->h_addr_list[0], he->h_length);
+    printf("SOCKS5: Entering COPY state, registering origin_fd=%d\n", data->origin_fd);
+    
+    if (selector_register(key->s, data->origin_fd, &origin_handler, OP_READ, data) != SELECTOR_SUCCESS) {
+        printf("SOCKS5: Failed to register origin_fd in selector\n");
     } else {
-        printf("SOCKS5: Using IP address %s\n", host);
+        printf("SOCKS5: Successfully registered origin_fd in selector\n");
     }
-
-    if (connect(sockfd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-        printf("SOCKS5: Failed to connect to %s:%d: %s\n", host, port, strerror(errno));
-        close(sockfd);
-        return -1;
-    }
-
-    printf("SOCKS5: Connected to %s:%d (fd=%d)\n", host, port, sockfd);
-    return sockfd;
 }
 
-static int parse_socks5_request(uint8_t* buffer, ssize_t buffer_len, parsed_request* req) {
-    printf("SOCKS5: Parsing request (%ld bytes)\n", buffer_len);
-    if (buffer_len < 4) {
-        printf("SOCKS5: Request too short (need at least 4 bytes)\n");
-        return -1;
-    }
-
-    req->version = buffer[0];
-    req->cmd = buffer[1];
-    req->atyp = buffer[3];
-
-    printf("SOCKS5: version=0x%02x, cmd=0x%02x, atyp=0x%02x\n", req->version, req->cmd, req->atyp);
-
-    if (req->version != SOCKS5_VERSION) {
-        printf("SOCKS5: Invalid version 0x%02x\n", req->version);
-        return -1;
-    }
-
-    if (req->cmd != SOCKS5_CMD_CONNECT) {
-        printf("SOCKS5: Unsupported command 0x%02x\n", req->cmd);
-        return -1;
-    }
-
-    int addr_start = 4;
-    int addr_len = 0;
-
-    switch (req->atyp) {
-        case SOCKS5_ATYP_IPV4: {
-            printf("SOCKS5: IPv4 address\n");
-            if (buffer_len < 4 + 4 + 2) {
-                printf("SOCKS5: Incomplete IPv4 request\n");
-                return -1;
-            }
+static socks5_state hello_read(struct selector_key *key) {
+    struct socks5* data = ATTACHMENT(key);
+    
+    printf("SOCKS5: hello_read called (current_state=%d)\n", stm_state(&data->stm));
+    
+    size_t count;
+    uint8_t* ptr = buffer_write_ptr(&data->read_buffer, &count);
+    ssize_t n = recv(key->fd, ptr, count, MSG_DONTWAIT);
+    
+    printf("SOCKS5: Received %ld bytes\n", n);
+    
+    if (n > 0) {
+        buffer_write_adv(&data->read_buffer, n);
+        uint8_t *read_ptr = buffer_read_ptr(&data->read_buffer, &count);
+        printf("SOCKS5: Processing HELLO_READ (available: %zu)\n", count);
+        
+        if (count >= 3) {
+            // TODO parsing con socks5_protocol.h
+            uint8_t version = read_ptr[0];
+            uint8_t nmethods = read_ptr[1];
             
-            // Convertir IP a string
-            struct in_addr ip_addr;
-            memcpy(&ip_addr, buffer + addr_start, 4);
-            if (inet_ntop(AF_INET, &ip_addr, req->target_host, sizeof(req->target_host)) == NULL) {
-                printf("SOCKS5: Failed to convert IPv4 address\n");
-                return -1;
+            printf("SOCKS5: HELLO version=%d, nmethods=%d\n", version, nmethods);
+            
+            if (version == SOCKS5_VERSION && count >= 2 + nmethods) {
+                printf("SOCKS5: Available methods: ");
+                for (int i = 0; i < nmethods; i++) {
+                    printf("%d ", read_ptr[2 + i]);
+                }
+                printf("\n");
+                buffer_read_adv(&data->read_buffer, 2 + nmethods);
+
+                bool supports_userpass = false;
+                for (int i = 0; i < nmethods; i++) {
+                    if (read_ptr[2 + i] == AUTH_METHOD_USER_PASS) {
+                        supports_userpass = true;
+                        break;
+                    }
+                }
+                
+                data->auth_method = supports_userpass ? AUTH_METHOD_USER_PASS : AUTH_METHOD_NO_METHODS;
+                
+                printf("SOCKS5: HELLO parsed successfully, selected method: %d\n", data->auth_method);
+                
+                return HELLO_WRITE;
             }
-            addr_len = 4;
-            break;
+        }
+    } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+        printf("SOCKS5: Error reading: %s\n", strerror(errno));
+        return ERROR;
+    }
+    
+    return HELLO_READ;
+}
+
+static socks5_state hello_write(struct selector_key *key) {
+    struct socks5* data = ATTACHMENT(key);
+    
+    printf("SOCKS5: Processing HELLO_WRITE\n");
+    
+    // TODO usar parsing de socks5_protocol.h
+    uint8_t response[2];
+    response[0] = SOCKS5_VERSION;
+    response[1] = data->auth_method;
+    
+    ssize_t n = send(key->fd, response, sizeof(response), MSG_NOSIGNAL | MSG_DONTWAIT);
+    
+    if (n > 0) {
+        printf("SOCKS5: Sent HELLO_REPLY successfully (method=%d, bytes=%ld)\n", data->auth_method, n);
+        
+        if (data->auth_method == AUTH_METHOD_NO_METHODS) {
+            return ERROR;
+        } else {
+            printf("SOCKS5: Transitioning to AUTH_READ\n");
+            return AUTH_READ;
+        }
+    } else if (n < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            printf("SOCKS5: HELLO_WRITE would block, staying in HELLO_WRITE\n");
+        } else {
+            printf("SOCKS5: Error sending HELLO_REPLY: %s\n", strerror(errno));
+            return ERROR;
+        }
+    }
+
+    return HELLO_WRITE;
+}
+
+static socks5_state auth_read(struct selector_key *key) {
+    struct socks5* data = ATTACHMENT(key);
+    
+    size_t count;
+
+    uint8_t* ptr = buffer_write_ptr(&data->read_buffer, &count);
+    ssize_t n = recv(key->fd, ptr, count, MSG_DONTWAIT);
+    
+    if (n > 0) {
+        buffer_write_adv(&data->read_buffer, n);
+        
+        uint8_t* read_ptr = buffer_read_ptr(&data->read_buffer, &count);
+        if (count >= 2) {
+            // TODO parsing con socks5_protocol.h
+            uint8_t version = read_ptr[0];
+            uint8_t ulen = read_ptr[1];
+            
+            if (version == AUTH_VERSION && ulen > 0 && count >= 2 + ulen + 1) {
+                uint8_t plen = read_ptr[2 + ulen];
+
+                if (plen > 0 && count >= 2 + ulen + 1 + plen) {
+                    buffer_read_adv(&data->read_buffer, 2); // version + ulen
+                    
+                    char username[MAX_DATA_SIZE];
+                    for (int i = 0; i < ulen; i++) {
+                        username[i] = buffer_read(&data->read_buffer);
+                    }
+                    username[ulen] = '\0';
+                    
+                    plen = buffer_read(&data->read_buffer);
+                    char password[MAX_DATA_SIZE];
+                    for (int i = 0; i < plen; i++) {
+                        password[i] = buffer_read(&data->read_buffer);
+                    }
+                    password[plen] = '\0';
+                    
+                    data->auth_ok = false;
+                    if (data->config && data->config->users) {
+                        bool found = false;
+                        for (int i = 0; i < data->config->user_count && !found; i++) {
+                            server_user user = data->config->users[i];
+                            if (strcmp(user.user, username) == 0 && strcmp(user.pass, password) == 0) {
+                                data->auth_ok = true;
+                                found = true;
+                            }
+                        }
+                    }
+                    return AUTH_WRITE;
+                }
+            } else if (version != AUTH_VERSION) {
+                return ERROR;
+            }
+        }
+    } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+        return ERROR;
+    }
+    
+    return AUTH_READ;
+}
+
+static socks5_state auth_write(struct selector_key *key) {
+    struct socks5* data = ATTACHMENT(key);
+    
+    auth_response response = create_auth_response(data->auth_ok ? AUTH_SUCCESS : AUTH_FAILURE);
+    
+    size_t count;
+
+    uint8_t* ptr = buffer_write_ptr(&data->write_buffer, &count);
+    ssize_t n;
+     
+    if (count >= sizeof(response)) {
+        memcpy(ptr, &response, sizeof(response));
+        buffer_write_adv(&data->write_buffer, sizeof(response));
+        
+        ptr = buffer_read_ptr(&data->write_buffer, &count);
+        n = send(key->fd, ptr, count, MSG_NOSIGNAL | MSG_DONTWAIT);
+        
+        if (n > 0) {
+            buffer_read_adv(&data->write_buffer, n);
+            
+            if (!buffer_can_read(&data->write_buffer)) {
+                if (!data->auth_ok) {
+                    return ERROR;
+                } else {
+                    return REQUEST_READ;
+                }
+            }
+        } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+            return ERROR;
+        }
+    }
+     
+    return ERROR;
+}
+
+static socks5_state request_read(struct selector_key *key) {
+    struct socks5* data = ATTACHMENT(key);
+    
+    size_t count;
+
+    uint8_t *ptr = buffer_write_ptr(&data->read_buffer, &count);
+    ssize_t n = recv(key->fd, ptr, count, MSG_DONTWAIT);
+    
+    if (n > 0) {
+        buffer_write_adv(&data->read_buffer, n);
+        
+        uint8_t *read_ptr = buffer_read_ptr(&data->read_buffer, &count);
+        if (count >= 6) { // Mínimo para una request válida
+            if (read_ptr[0] == SOCKS5_VERSION && read_ptr[1] == SOCKS5_CMD_CONNECT) {
+                // TODO parsing con socks5_protocol.h
+                size_t req_size = 6; // VER + CMD + RSV + ATYP + 2 bytes puerto mínimo
+                uint8_t atyp = read_ptr[3];
+                
+                if (atyp == SOCKS5_ATYP_IPV4) {
+                    req_size = 4 + 4 + 2; // header + ipv4 + puerto
+                } else if (atyp == SOCKS5_ATYP_DOMAIN) {
+                    if (count >= 5) {
+                        uint8_t domain_len = read_ptr[4];
+                        req_size = 4 + 1 + domain_len + 2; // header + len + domain + puerto
+                    }
+                }
+                
+                if (count >= req_size) {
+                    buffer_read_adv(&data->read_buffer, 4); // VER + CMD + RSV + ATYP
+                    
+                    if (atyp == SOCKS5_ATYP_DOMAIN) {
+                        uint8_t domain_len = buffer_read(&data->read_buffer);
+                        for (int i = 0; i < domain_len; i++) {
+                            data->target_host[i] = buffer_read(&data->read_buffer);
+                        }
+                        data->target_host[domain_len] = '\0';
+                    } else if (atyp == SOCKS5_ATYP_IPV4) {
+                        uint8_t ip[4];
+                        for (int i = 0; i < 4; i++) {
+                            ip[i] = buffer_read(&data->read_buffer);
+                        }
+                        sprintf(data->target_host, "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
+                    }
+                    
+                    uint8_t port_high = buffer_read(&data->read_buffer);
+                    uint8_t port_low = buffer_read(&data->read_buffer);
+                    data->target_port = (port_high << 8) | port_low;
+                    
+                    char port_str[6];
+                    snprintf(port_str, sizeof(port_str), "%d", data->target_port);
+                    data->origin_fd = connect_to_host(data->target_host, port_str);
+                    
+                    if (data->origin_fd >= 0) {
+                        data->reply_code = SOCKS5_REP_SUCCESS;
+                        return CONNECTING;
+                    } else {
+                        data->reply_code = SOCKS5_REP_HOST_UNREACH;
+                        return REQUEST_WRITE;
+                    }
+                }
+            } else {
+                return ERROR;
+            }
+        }
+    } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+        return ERROR;
+    }
+    
+    return REQUEST_READ;
+}
+
+static socks5_state connecting(struct selector_key *key) {
+    struct socks5* data = ATTACHMENT(key);
+    
+    int error = 0;
+    socklen_t len = sizeof(error);
+    if (getsockopt(data->origin_fd, SOL_SOCKET, SO_ERROR, &error, &len) == 0) {
+        if (error == 0) {
+            data->reply_code = SOCKS5_REP_SUCCESS;
+        } else {
+            data->reply_code = SOCKS5_REP_HOST_UNREACH;
         }
         
-        case SOCKS5_ATYP_DOMAIN: {
-            printf("SOCKS5: Domain name\n");
-            if (buffer_len < 4 + 1) {
-                printf("SOCKS5: Incomplete domain request\n");
-                return -1;
-            }
-            
-            uint8_t domain_len = buffer[addr_start];
-            if (buffer_len < 4 + 1 + domain_len + 2) {
-                printf("SOCKS5: Incomplete domain request\n");
-                return -1;
-            }
-            
-            if (domain_len >= sizeof(req->target_host)) {
-                printf("SOCKS5: Domain name too long\n");
-                return -1;
-            }
-            
-            memcpy(req->target_host, buffer + addr_start + 1, domain_len);
-            req->target_host[domain_len] = '\0';
-            addr_len = 1 + domain_len;
-            break;
-        }
+        return REQUEST_WRITE;
+    } else {
+        return ERROR;
+    }
+    
+    return CONNECTING;
+}
+
+static socks5_state request_write(struct selector_key *key) {
+    struct socks5* data = ATTACHMENT(key);
+
+    socks5_response response = create_socks5_response(data->reply_code);
+    
+    size_t count;
+    uint8_t* ptr = buffer_write_ptr(&data->write_buffer, &count);
+    ssize_t n;
+
+    if (count >= sizeof(response)) {
+        memcpy(ptr, &response, sizeof(response));
+        buffer_write_adv(&data->write_buffer, sizeof(response));
         
-        case SOCKS5_ATYP_IPV6:
-            // TODO falta ipv6 support, agregarlo en el struct tmb!
-            printf("SOCKS5: IPv6 not supported yet\n");
-            return -1;
+        ptr = buffer_read_ptr(&data->write_buffer, &count);
+        n = send(key->fd, ptr, count, MSG_NOSIGNAL | MSG_DONTWAIT);
+        
+        if (n > 0) {
+            buffer_read_adv(&data->write_buffer, n);
             
-        default:
-            printf("SOCKS5: Unsupported address type 0x%02x\n", req->atyp);
-            return -1;
+            if (!buffer_can_read(&data->write_buffer)) {
+                if (data->reply_code == SOCKS5_REP_SUCCESS) {
+                    return COPY;
+                } else {
+                    return DONE; // ? o ver is otro estado, porque en realidad falló la conexión
+                }
+            }
+        } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+            return ERROR;
+        }
+    } else {
+        return ERROR;
     }
 
-    uint16_t* port_ptr = (uint16_t*)(buffer + addr_start + addr_len);
-    req->target_port = ntohs(*port_ptr);
+    return REQUEST_READ;
+}
 
-    printf("SOCKS5: Parsed request - target=%s:%d\n", req->target_host, req->target_port);
+static socks5_state copy_r(struct selector_key *key) {
+    struct socks5* data = ATTACHMENT(key);
+    
+    size_t count;
+    uint8_t* ptr = buffer_write_ptr(&data->read_buffer, &count);
+    ssize_t n = recv(key->fd, ptr, count, MSG_DONTWAIT);
+    
+    if (n > 0) {
+        buffer_write_adv(&data->read_buffer, n);
+        printf("SOCKS5: Received %ld bytes from origin_fd=%d\n ! ! ! !  ! 1 ! ! ! !      !", n, data->origin_fd);
+        uint8_t* read_ptr = buffer_read_ptr(&data->read_buffer, &count);
+        if (count > 0) {
+            ssize_t sent = send(data->origin_fd, read_ptr, count, MSG_NOSIGNAL);
+            if (sent > 0) {
+                buffer_read_adv(&data->read_buffer, sent);
+            } else if (sent < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+                return ERROR;
+            }
+        }
+    } else if (n == 0) {
+        return DONE;
+    } else if (errno != EAGAIN && errno != EWOULDBLOCK) {
+        return ERROR;
+    }
+    
+    return COPY;
+}
 
-    return 0;
+static socks5_state copy_w(struct selector_key *key) {
+    struct socks5* data = ATTACHMENT(key);
+   
+    size_t count;
+    uint8_t* ptr = buffer_read_ptr(&data->write_buffer, &count);
+    
+    if (count > 0) {
+        ssize_t n = send(key->fd, ptr, count, MSG_NOSIGNAL | MSG_DONTWAIT);
+        if (n > 0) {
+            buffer_read_adv(&data->write_buffer, n);
+            printf("SOCKS5: Sent %ld bytes to client from write buffer\n", n);
+        } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
+            printf("SOCKS5: Error writing to client: %s\n", strerror(errno));
+            return ERROR;
+        }
+    }
+    
+    return COPY;
 }
 
 int socks5_init(const int client_fd, fd_selector s, server_config* config, server_stats stats) {
+    printf("SOCKS5: Initializing connection (fd=%d)\n", client_fd);
+    
+    // Configurar socket como no-bloqueante
+    if (set_non_blocking(client_fd) < 0) {
+        printf("SOCKS5: Failed to set non-blocking\n");
+        return -1;
+    }
+    
     socks5* socks = calloc(1, sizeof(*socks));
     if (socks == NULL) {
+        printf("SOCKS5: Failed to allocate memory\n");
         return -1;
     }
 
     socks->client_fd = client_fd;
     socks->origin_fd = -1;
     socks->config = config;
-    socks->state = HELLO_READ;
+    socks->stats = stats;
     socks->auth_ok = false;
     socks->auth_method = 0;
-    socks->stats = stats;
 
     buffer_init(&(socks->read_buffer), INITIAL_BUFFER_SIZE, socks->read_raw_buff);
     buffer_init(&(socks->write_buffer), INITIAL_BUFFER_SIZE, socks->write_raw_buff);
 
+    socks->stm.initial   = socks5_stm.initial;
+    socks->stm.max_state = socks5_stm.max_state;
+    socks->stm.states    = socks5_stm.states;
+    
+    stm_init(&socks->stm);
+    
     if (selector_register(s, client_fd, &socks5_handler, OP_READ, socks) != SELECTOR_SUCCESS) {
+        printf("SOCKS5: Failed to register with selector\n");
         free(socks);
         return -1;
     }
 
     log_connection_open(stats, client_fd);
+    printf("SOCKS5: Connection initialized successfully (fd=%d, initial_state=%d)\n", client_fd, socks5_stm.initial);
 
     return 0;
 }
 
+
+static bool is_op_write(const enum socks5_state state) {
+    return (state == HELLO_WRITE || state == AUTH_WRITE || state == REQUEST_WRITE || state == CONNECTING || state == COPY);
+}
+
+static bool is_op_read(const enum socks5_state state) {
+    return (state == HELLO_READ || state == AUTH_READ || state == REQUEST_READ || state == CONNECTING || state == COPY);
+}
+
 static void socks5_read(struct selector_key *key) {
-    struct socks5 *socks = (struct socks5 *)key->data;
-    bool should_cleanup = false;
+    struct state_machine* stm = &ATTACHMENT(key)->stm;
+    socks5_state next = stm_handler_read(stm, key);
     
-    switch (socks->state) {
-        case HELLO_READ: {
-            uint8_t buffer[257];
-            ssize_t n = recv(socks->client_fd, buffer, sizeof(buffer) - 1, MSG_NOSIGNAL);
-            
-            if (n <= 0 || n < 2) {
-                should_cleanup = true;
-                break;
-            }
-
-            uint8_t version = buffer[0];
-            uint8_t nmethods = buffer[1];
-            
-            if (version != SOCKS5_VERSION || n < 2 + nmethods) {
-                should_cleanup = true;
-                break;
-            }
-
-            bool supports_userpass = false;
-            for (int i = 0; i < nmethods && i < (n - 2); i++) {
-                if (buffer[2 + i] == AUTH_METHOD_USER_PASS) {
-                    supports_userpass = true;
-                    break;
-                }
-            }
-
-            socks->auth_method = supports_userpass ? AUTH_METHOD_USER_PASS : AUTH_METHOD_NO_METHODS;
-            socks->state = HELLO_WRITE;
-            
-            if (selector_set_interest_key(key, OP_WRITE) != SELECTOR_SUCCESS) {
-                should_cleanup = true;
-            }
-            break;
-        }
-        
-        case AUTH_READ: {
-            uint8_t buffer[513];
-            ssize_t n = recv(socks->client_fd, buffer, sizeof(buffer) - 1, MSG_NOSIGNAL);
-            
-            if (n <= 0 || n < 2) {
-                should_cleanup = true;
-                break;
-            }
-
-            uint8_t version = buffer[0];
-            uint8_t ulen = buffer[1];
-            
-            if (version != AUTH_VERSION || n < 2 + ulen + 1 || ulen > 255) {
-                should_cleanup = true;
-                break;
-            }
-
-            char username[256] = {0};
-            memcpy(username, buffer + 2, ulen);
-            
-            uint8_t plen = buffer[2 + ulen];
-            if (n < 2 + ulen + 1 + plen || plen > 255) {
-                should_cleanup = true;
-                break;
-            }
-            
-            char password[256] = {0};
-            memcpy(password, buffer + 2 + ulen + 1, plen);
-            
-            // Verificar credenciales
-            socks->auth_ok = false;
-            if (socks->config && socks->config->users) {
-                for (int i = 0; i < socks->config->user_count; i++) {
-                    server_user user = socks->config->users[i];
-                    if (strcmp(user.user, username) == 0 && strcmp(user.pass, password) == 0) {
-                        socks->auth_ok = true;
-                        break;
-                    }
-                }
-            }
-
-            socks->state = AUTH_WRITE;
-            printf("SOCKS5: AUTH processed (user='%s', success=%s)\n", 
-                   username, socks->auth_ok ? "YES" : "NO");
-            
-            if (selector_set_interest_key(key, OP_WRITE) != SELECTOR_SUCCESS) {
-                should_cleanup = true;
-            }
-            break;
-        }
-        
-        case REQUEST_READ: {
-            printf("SOCKS5: Processing REQUEST_READ\n");
-            
-            uint8_t buffer[MAX_REQUEST_SIZE];
-            ssize_t n = recv(socks->client_fd, buffer, sizeof(buffer), MSG_NOSIGNAL);
-            
-            if (n <= 0) {
-                printf("SOCKS5: Error reading request: %s\n", strerror(errno));
-                should_cleanup = true;
-                break;
-            }
-
-            parsed_request req;
-            if (parse_socks5_request(buffer, n, &req) != 0) {
-                printf("SOCKS5: Invalid REQUEST format\n");
-                socks5_response error_resp = create_socks5_response(SOCKS5_REP_FAILURE);
-                send(socks->client_fd, &error_resp, sizeof(error_resp), MSG_NOSIGNAL);
-                should_cleanup = true;
-                break;
-            }
-
-            strncpy(socks->target_host, req.target_host, sizeof(socks->target_host) - 1);
-            socks->target_port = req.target_port;
-
-            socks->origin_fd = connect_to_target(req.target_host, req.target_port);
-            
-            if (socks->origin_fd >= 0) {
-                socks->reply_code = SOCKS5_REP_SUCCESS;
-                printf("SOCKS5: Connection to %s:%d successful\n", req.target_host, req.target_port);
-            } else {
-                socks->reply_code = SOCKS5_REP_HOST_UNREACH;
-                printf("SOCKS5: Connection to %s:%d failed\n", req.target_host, req.target_port);
-            }
-
-            socks->state = REQUEST_WRITE;
-            
-            if (selector_set_interest_key(key, OP_WRITE) != SELECTOR_SUCCESS) {
-                should_cleanup = true;
-            }
-            break;
-        }
-        
-        default:
-            should_cleanup = true;
-            break;
-    }
+    printf("SOCKS5: Read event, state transition to %d\n", next);
     
-    if (should_cleanup) {
-        printf("SOCKS5: Cleaning up connection fd=%d\n", socks->client_fd);
+    if (ERROR == next || DONE == next) {
+        printf("SOCKS5: Terminating connection (state=%d)\n", next);
         selector_unregister_fd(key->s, key->fd);
+    } else {
+        fd_interest interest = OP_NOOP;
+        if (is_op_write(next)) {
+            interest = OP_WRITE;
+        } else if (is_op_read(next)) {
+            interest = OP_READ;
+        }
+        
+        if (interest != OP_NOOP) {
+            printf("SOCKS5: Changing selector interest to %d\n", interest);
+            selector_set_interest_key(key, interest);
+        }
     }
 }
 
+
 static void socks5_write(struct selector_key *key) {
-    struct socks5 *socks = (struct socks5 *)key->data;
-    bool should_cleanup = false;
+    struct state_machine* stm = &ATTACHMENT(key)->stm;
+    socks5_state next = stm_handler_write(stm, key);
     
-    switch (socks->state) {
-        case HELLO_WRITE: {
-            socks5_hello_response response = create_hello_response(socks->auth_method);
-            ssize_t n = send(socks->client_fd, &response, sizeof(response), MSG_NOSIGNAL);
-            
-            if (n <= 0) {
-                should_cleanup = true;
-                break;
-            }
-
-            if (socks->auth_method == AUTH_METHOD_NO_METHODS) {
-                should_cleanup = true;
-                break;
-            }
-
-            socks->state = AUTH_READ;
-            
-            if (selector_set_interest_key(key, OP_READ) != SELECTOR_SUCCESS) {
-                should_cleanup = true;
-            }
-            break;
-        }
-        
-        case AUTH_WRITE: {
-            auth_response response = create_auth_response(socks->auth_ok ? AUTH_SUCCESS : AUTH_FAILURE);
-            ssize_t n = send(socks->client_fd, &response, sizeof(response), MSG_NOSIGNAL);
-            
-            if (n <= 0) {
-                should_cleanup = true;
-                break;
-            }
-            
-            if (!socks->auth_ok) {
-                printf("SOCKS5: Authentication failed, closing connection\n");
-                should_cleanup = true;
-                break;
-            }
-
-            printf("SOCKS5: AUTH_REPLY sent successfully - Authentication OK!\n");
-            
-            socks->state = REQUEST_READ;
-            
-            if (selector_set_interest_key(key, OP_READ) != SELECTOR_SUCCESS) {
-                should_cleanup = true;
-            }
-            break;
-        }
-        
-        case REQUEST_WRITE: {
-            printf("SOCKS5: Processing REQUEST_WRITE\n");
-            
-            socks5_response response = create_socks5_response(socks->reply_code);
-            ssize_t n = send(socks->client_fd, &response, sizeof(response), MSG_NOSIGNAL);
-            
-            if (n <= 0) {
-                printf("SOCKS5: Error sending REQUEST response: %s\n", strerror(errno));
-                should_cleanup = true;
-                break;
-            }
-
-            printf("SOCKS5: REQUEST_REPLY sent (reply=0x%02x)\n", socks->reply_code);
-            
-            if (socks->reply_code == SOCKS5_REP_SUCCESS) {
-                printf("SOCKS5: Handshake complete! Connection established to %s:%d\n", socks->target_host, socks->target_port);
-                printf("🚧 SOCKS5: Data forwarding not implemented yet - closing connection\n");
-                // TODO: Aquí iría el estado COPY para forwarding de datos
-            }
-            
-            should_cleanup = true; // Por ahora cerrar después de REQUEST
-            break;
-        }
-        
-        default:
-            should_cleanup = true;
-            break;
-    }
+    printf("SOCKS5: Write event, state transition to %d\n", next);
     
-    if (should_cleanup) {
-        printf("SOCKS5: Cleaning up connection fd=%d\n", socks->client_fd);
+    if (ERROR == next || DONE == next) {
+        printf("SOCKS5: Terminating connection (state=%d)\n", next);
         selector_unregister_fd(key->s, key->fd);
+    } else {
+        fd_interest interest = OP_NOOP;
+        if (is_op_read(next)) {
+            interest = OP_READ;
+        } else if (is_op_write(next)) {
+            interest = OP_WRITE;
+        }
+        
+        if (interest != OP_NOOP) {
+            printf("SOCKS5: Changing selector interest to %d\n", interest);
+            selector_set_interest_key(key, interest);
+        }
     }
 }
 
 static void socks5_close(struct selector_key *key) {
-    struct socks5* socks = (struct socks5 *)key->data;
+    struct socks5* socks = ATTACHMENT(key);
     if (socks == NULL) {
         return;
     }
@@ -449,4 +593,49 @@ static void socks5_close(struct selector_key *key) {
         close(socks->origin_fd);
     }
     free(socks);
+}
+
+static void origin_read(struct selector_key *key) {
+    struct socks5* data = ATTACHMENT(key);
+    
+    printf("SOCKS5: Origin read event\n");
+    
+    size_t count;
+    uint8_t* ptr = buffer_write_ptr(&data->write_buffer, &count);
+    ssize_t n = recv(key->fd, ptr, count, MSG_DONTWAIT);
+    
+    if (n > 0) {
+        buffer_write_adv(&data->write_buffer, n);
+        printf("SOCKS5: Received %ld bytes from origin, forwarding to client!\n", n);
+        
+        uint8_t *read_ptr = buffer_read_ptr(&data->write_buffer, &count);
+        if (count > 0) {
+            ssize_t sent = send(data->client_fd, read_ptr, count, MSG_NOSIGNAL | MSG_DONTWAIT);
+            if (sent > 0) {
+                buffer_read_adv(&data->write_buffer, sent);
+                printf("SOCKS5: Forwarded %ld bytes to client immediately\n", sent);
+            } else if (sent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+                printf("SOCKS5: Client not ready, data buffered for later\n");
+                selector_set_interest(key->s, data->client_fd, OP_WRITE); // mas tarde
+            } else if (sent < 0) {
+                printf("SOCKS5: Error sending to client: %s\n", strerror(errno));
+                selector_unregister_fd(key->s, key->fd);
+                selector_unregister_fd(key->s, data->client_fd);
+                return;
+            }
+        }
+    } else if (n == 0) {
+        printf("SOCKS5: Origin closed connection - cleaning up properly\n");
+        selector_unregister_fd(key->s, key->fd);
+        selector_unregister_fd(key->s, data->client_fd);
+    } else if (errno != EAGAIN && errno != EWOULDBLOCK) {
+        printf("SOCKS5: Error reading from origin: %s\n", strerror(errno));
+        selector_unregister_fd(key->s, key->fd);
+        selector_unregister_fd(key->s, data->client_fd);
+    }
+}
+
+static void origin_close(struct selector_key *key) {
+    printf("SOCKS5: Origin close event - cleanup handled by origin_read\n");
+    // El cleanup ya fue manejado en origin_read, no hacer nada más aquí
 }

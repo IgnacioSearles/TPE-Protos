@@ -20,7 +20,6 @@ static server_stats socks5_server_stats;
 static volatile bool done = false;
 void handle_shutdown(int sig) {
     done = true;
-    print_stats(socks5_server_stats);
 }
 
 static void accept_socks5(struct selector_key *key) {

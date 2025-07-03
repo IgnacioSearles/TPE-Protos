@@ -353,26 +353,16 @@ static unsigned main_read(struct selector_key *key) {
             char total_connections[MAX_DATA_SIZE];
             char current_bytes_proxied[MAX_DATA_SIZE];
             char total_bytes_proxied[MAX_DATA_SIZE];
-            printf("debugging hi 1\n");
-            fflush(stdout);
             sprintf(current_connections, CURRENT_CONNECTIONS_MSG, get_active_connection_count(pctp_data->stats));
             sprintf(total_connections, TOTAL_CONNECTIONS_MSG, get_total_connection_count(pctp_data->stats));
             sprintf(current_bytes_proxied, CURRENT_BYTES_PROXIED_MSG, get_current_connections_bytes_proxied(pctp_data->stats));
             sprintf(total_bytes_proxied, TOTAL_BYTES_PROXIED_MSG, get_total_bytes_proxied(pctp_data->stats));
 
-            printf("debugging hi 2\n");
-            fflush(stdout);
             write_msg_to_buffer(&pctp_data->write_buffer, current_connections);
-            printf("debugging hi 3\n");
-            fflush(stdout);
             write_msg_to_buffer(&pctp_data->write_buffer, total_connections);
             write_msg_to_buffer(&pctp_data->write_buffer, current_bytes_proxied);
             write_msg_to_buffer(&pctp_data->write_buffer, total_bytes_proxied);
-            printf("debugging hi 4\n");
-            fflush(stdout);
             write_msg_to_buffer(&pctp_data->write_buffer, EMPTY_MSG);
-            printf("debugging hi 5\n");
-            fflush(stdout);
             return STATS_WRITE;
         }
         if (add_event->type == TYPE_BASIC) {

@@ -15,9 +15,17 @@
 
 #define OK_USER_MSG "+OK Please send password\n"
 #define OK_PASS_MSG "+OK Succesfully logged in\n"
+#define OK_STATS_MSG "+OK Sending stats...\n"
 #define OK_ADD_MSG "+OK Please provide new user credentials\n"
 #define OK_ADD_PASS_MSG "+OK Succesfully added user\n"
 #define OK_DONE_MSG "+OK Done\n"
+
+#define CURRENT_CONNECTIONS_MSG "current_connections: %ld\n"
+#define TOTAL_CONNECTIONS_MSG "total_connections: %ld\n"
+#define CURRENT_BYTES_PROXIED_MSG "current_bytes_proxied: %ld\n"
+#define TOTAL_BYTES_PROXIED_MSG "total_bytes_proxied: %ld\n"
+#define EMPTY_MSG "\n"
+
 #define ERR_INVALID_USER_MSG "-ERR Invalid username\n"
 #define ERR_INVALID_PASS_MSG "-ERR Invalid password\n"
 #define ERR_INVALID_COMMAND_MSG "-ERR Invalid command for current state\n"
@@ -34,7 +42,7 @@ enum pctp_states {
     LOGIN_PASS_ERROR_WRITE,
     MAIN_READ,
     MAIN_ERROR_WRITE,
-    // STATS,
+    STATS_WRITE,
     ADD_WRITE,
     ADD_USER_READ,
     ADD_USER_SUCCESS_WRITE,
@@ -68,6 +76,8 @@ static void reset_main_state(const unsigned state, struct selector_key *key);
 static void reset_add_state(const unsigned state, struct selector_key *key);
 
 static unsigned main_error_write(struct selector_key *key);
+
+static unsigned stats_write(struct selector_key *key);
 
 static unsigned add_write(struct selector_key *key);
 
@@ -119,7 +129,7 @@ static const struct state_definition states[] = {
     { .state = LOGIN_PASS_ERROR_WRITE,      .on_arrival = selector_set_interest_write, .on_write_ready = login_pass_error_write, .on_departure = reset_pass_state },
     { .state = MAIN_READ,                   .on_arrival = selector_set_interest_read, .on_read_ready = main_read },
     { .state = MAIN_ERROR_WRITE,            .on_arrival = selector_set_interest_write, .on_write_ready = main_error_write, .on_departure = reset_main_state },
-    // { .state = STATS, },
+    { .state = STATS_WRITE,                 .on_arrival = selector_set_interest_write, .on_write_ready = stats_write, .on_departure = reset_main_state },
     { .state = ADD_WRITE,                   .on_arrival = selector_set_interest_write, .on_write_ready = add_write, .on_departure = reset_main_state },
     { .state = ADD_USER_READ,               .on_arrival = selector_set_interest_read, .on_read_ready = add_user_read },
     { .state = ADD_USER_SUCCESS_WRITE,      .on_arrival = selector_set_interest_write, .on_write_ready = add_user_success_write },
@@ -168,7 +178,7 @@ int pctp_init(const int client_fd, fd_selector selector, server_config* config, 
     // TODO: init parsers
     pctp_data->user_parser = parser_init(parser_classes, &user_parser_def);
     pctp_data->pass_parser = parser_init(parser_classes, &pass_parser_def);
-    // pctp_data->stats_parser = parser_init();
+    pctp_data->stats_parser = parser_init(parser_no_classes(), &stats_parser_def);
     pctp_data->add_parser = parser_init(parser_no_classes(), &add_parser_def);
     // pctp_data->config_parser = parser_init();
     pctp_data->exit_parser = parser_init(parser_no_classes(), &exit_parser_def);
@@ -332,8 +342,39 @@ static unsigned main_read(struct selector_key *key) {
 
     while (buffer_can_read(read_buffer)) {
         uint8_t c = buffer_read(read_buffer);
+        const struct parser_event* stats_event = parser_feed(pctp_data->stats_parser, c);
         const struct parser_event* add_event = parser_feed(pctp_data->add_parser, c);
         const struct parser_event* exit_event = parser_feed(pctp_data->exit_parser, c);
+        if (stats_event->type == TYPE_SUCCESS) {
+            printf("Main parser succeded\n");
+            printf("Command: stats\n");
+            write_msg_to_buffer(&pctp_data->write_buffer, OK_STATS_MSG);
+            char current_connections[MAX_DATA_SIZE];
+            char total_connections[MAX_DATA_SIZE];
+            char current_bytes_proxied[MAX_DATA_SIZE];
+            char total_bytes_proxied[MAX_DATA_SIZE];
+            printf("debugging hi 1\n");
+            fflush(stdout);
+            sprintf(current_connections, CURRENT_CONNECTIONS_MSG, get_active_connection_count(pctp_data->stats));
+            sprintf(total_connections, TOTAL_CONNECTIONS_MSG, get_total_connection_count(pctp_data->stats));
+            sprintf(current_bytes_proxied, CURRENT_BYTES_PROXIED_MSG, get_current_connections_bytes_proxied(pctp_data->stats));
+            sprintf(total_bytes_proxied, TOTAL_BYTES_PROXIED_MSG, get_total_bytes_proxied(pctp_data->stats));
+
+            printf("debugging hi 2\n");
+            fflush(stdout);
+            write_msg_to_buffer(&pctp_data->write_buffer, current_connections);
+            printf("debugging hi 3\n");
+            fflush(stdout);
+            write_msg_to_buffer(&pctp_data->write_buffer, total_connections);
+            write_msg_to_buffer(&pctp_data->write_buffer, current_bytes_proxied);
+            write_msg_to_buffer(&pctp_data->write_buffer, total_bytes_proxied);
+            printf("debugging hi 4\n");
+            fflush(stdout);
+            write_msg_to_buffer(&pctp_data->write_buffer, EMPTY_MSG);
+            printf("debugging hi 5\n");
+            fflush(stdout);
+            return STATS_WRITE;
+        }
         if (add_event->type == TYPE_BASIC) {
             printf("Main parser succeded\n");
             printf("Command: add basic\n");
@@ -354,7 +395,7 @@ static unsigned main_read(struct selector_key *key) {
             write_msg_to_buffer(&pctp_data->write_buffer, OK_DONE_MSG);
             return EXIT_WRITE;
         }
-        if (add_event->type == TYPE_ERROR && exit_event->type == TYPE_ERROR) {
+        if (stats_event->type == TYPE_ERROR && add_event->type == TYPE_ERROR && exit_event->type == TYPE_ERROR) {
             printf("Main parsers failed\n");
             write_msg_to_buffer(&pctp_data->write_buffer, ERR_INVALID_COMMAND_MSG);
             return MAIN_ERROR_WRITE;
@@ -366,6 +407,7 @@ static unsigned main_read(struct selector_key *key) {
 
 static void reset_main_state(const unsigned state, struct selector_key *key) {
     pctp* pctp_data = key->data;
+    parser_reset(pctp_data->stats_parser);
     reset_add_state(state, key);
     parser_reset(pctp_data->exit_parser);
 }
@@ -522,6 +564,19 @@ static unsigned main_error_write(struct selector_key *key) {
     switch (res) {
         case MSG_SENT: return MAIN_READ;
         case MSG_SEND_BLOCKED: return MAIN_ERROR_WRITE;
+        case MSG_SEND_ERROR: return ERROR;
+    }
+    return ERROR;
+}
+
+static unsigned stats_write(struct selector_key *key) {
+    pctp *pctp_data = key->data;
+    buffer *write_buffer = &pctp_data->write_buffer;
+    int fd = pctp_data->client_fd;
+    int res = send_buffer_msg(fd, write_buffer);
+    switch (res) {
+        case MSG_SENT: return MAIN_READ;
+        case MSG_SEND_BLOCKED: return STATS_WRITE;
         case MSG_SEND_ERROR: return ERROR;
     }
     return ERROR;

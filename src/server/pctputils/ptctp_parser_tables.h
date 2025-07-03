@@ -164,6 +164,72 @@ static const struct parser_definition pass_parser_def = {
     .start_state = ST_PASS_P
 };
 
+enum stats_parser_states { ST_STATS_S1, ST_STATS_T1, ST_STATS_A, ST_STATS_T2, ST_STATS_S2, ST_STATS_CR, ST_STATS_NL, ST_STATS_DONE, ST_STATS_ERROR};
+
+static const struct parser_state_transition stats_parser_state_S1_transitions[] = {
+    { .when = 'S', .dest = ST_STATS_T1, .act1 = ignore }, 
+    { .when = ANY, .dest = ST_STATS_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition stats_parser_state_T1_transitions[] = {
+    { .when = 'T', .dest = ST_STATS_A, .act1 = ignore }, 
+    { .when = ANY, .dest = ST_STATS_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition stats_parser_state_A_transitions[] = {
+    { .when = 'A', .dest = ST_STATS_T2, .act1 = ignore }, 
+    { .when = ANY, .dest = ST_STATS_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition stats_parser_state_T2_transitions[] = {
+    { .when = 'T', .dest = ST_STATS_S2, .act1 = ignore }, 
+    { .when = ANY, .dest = ST_STATS_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition stats_parser_state_S2_transitions[] = {
+    { .when = 'S', .dest = ST_STATS_CR, .act1 = ignore }, 
+    { .when = ANY, .dest = ST_STATS_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition stats_parser_state_CR_transitions[] = {
+    { .when = '\r', .dest = ST_STATS_NL, .act1 = ignore }, 
+    { .when = '\n', .dest = ST_STATS_DONE, .act1 = set_type_success }, 
+    { .when = ANY, .dest = ST_STATS_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition stats_parser_state_NL_transitions[] = {
+    { .when = '\n', .dest = ST_STATS_DONE, .act1 = set_type_success }, 
+    { .when = ANY, .dest = ST_STATS_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition stats_parser_state_DONE_transitions[] = {0};
+
+static const struct parser_state_transition stats_parser_state_ERROR_transitions[] = {
+    { .when = '\n', .dest = ST_STATS_ERROR, .act1 = set_type_error }, 
+    { .when = ANY, .dest = ST_STATS_ERROR, .act1 = ignore }
+};
+
+static const size_t stats_parser_states_n[] = {2, 2, 2, 2, 2, 3, 2, 0, 2};
+
+static const struct parser_state_transition* stats_parser_state_transitions[] = {
+    stats_parser_state_S1_transitions,
+    stats_parser_state_T1_transitions,
+    stats_parser_state_A_transitions,
+    stats_parser_state_T2_transitions,
+    stats_parser_state_S2_transitions,
+    stats_parser_state_CR_transitions,
+    stats_parser_state_NL_transitions,
+    stats_parser_state_DONE_transitions,
+    stats_parser_state_ERROR_transitions,
+};
+
+static const struct parser_definition stats_parser_def = {
+    .states_count = ST_STATS_ERROR,
+    .states = stats_parser_state_transitions,
+    .states_n = stats_parser_states_n,
+    .start_state = ST_STATS_S1
+};
+
 enum add_parser_states { ST_ADD_A1, ST_ADD_D1, ST_ADD_D2, ST_ADD_SPACE, 
                          ST_ADD_B_A3, ST_ADD_A2, ST_ADD_S, ST_ADD_I1, ST_ADD_C,
                                       ST_ADD_D3, ST_ADD_M, ST_ADD_I2, ST_ADD_N,

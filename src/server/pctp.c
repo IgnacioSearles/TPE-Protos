@@ -1,5 +1,5 @@
 #include "pctp.h"
-#include "ptctp_parser_tables.h"
+#include "./pctputils/ptctp_parser_tables.h"
 #include "server_stats.h"
 #include <stdlib.h>
 #include <stdio.h>

@@ -5,7 +5,6 @@
 #define CLASS_ALNUM (1 << 8)
 
 enum type { TYPE_UNDEFINED, TYPE_SUCCESS, TYPE_ERROR, TYPE_INPUT, TYPE_BASIC, TYPE_ADMIN };
-
 static void set_type_success(struct parser_event* ret, const uint8_t c) {
     ret->type = TYPE_SUCCESS;
 }

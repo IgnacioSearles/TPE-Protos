@@ -11,6 +11,8 @@
 #define INITIAL_BUFFER_SIZE 4096
 #define MAX_DATA_SIZE 256
 
+#define ATTACHMENT(key) ((struct socks5 *)(key)->data)
+
 typedef enum socks5_state {
     HELLO_READ,
     HELLO_WRITE,

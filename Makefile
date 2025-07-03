@@ -1,8 +1,8 @@
 include ./Makefile.inc
 
-SERVER_SOURCES=$(wildcard src/server/*.c)
-CLIENT_SOURCES=$(wildcard src/client/*.c)
-SHARED_SOURCES=$(wildcard src/shared/*.c)
+SERVER_SOURCES=$(wildcard src/server/*.c src/server/*/*.c)
+CLIENT_SOURCES=$(wildcard src/client/*.c src/client/*/*.c)
+SHARED_SOURCES=$(filter-out src/shared/tests/%, $(wildcard src/shared/*.c src/shared/*/*.c))
 
 OBJECTS_FOLDER=./obj
 OUTPUT_FOLDER=./bin
@@ -24,6 +24,8 @@ client: $(CLIENT_OUTPUT_FILE)
 
 objdirs:
 	mkdir -p $(OBJECTS_FOLDER)/server $(OBJECTS_FOLDER)/client $(OBJECTS_FOLDER)/shared
+	mkdir -p $(OBJECTS_FOLDER)/server/socks5utils $(OBJECTS_FOLDER)/server/pctputils
+	mkdir -p $(OBJECTS_FOLDER)/client/socks5utils
 
 $(OUTPUT_FOLDER):
 	mkdir -p $(OUTPUT_FOLDER)

@@ -1,5 +1,5 @@
-#include "socks5_protocol.h"
-#include "server_config.h"
+#include <socks5_protocol.h>
+#include <server_config.h>
 #include <string.h>
 #include <stdio.h>
 

@@ -1,4 +1,5 @@
 #include "server_params.h"
+#include "logger.h"
 #include "server_config.h"
 #include <string.h>
 #include <unistd.h>
@@ -15,27 +16,25 @@ void print_help(const char *program_name) {
     printf("  -u <user:pass>     adds an initial ADMIN user (max %d)\n", MAX_INITIAL_USERS);
     printf("  -N                 allows password disserters\n");
     printf("  -v                 shows version and terminates\n");
+    printf("  -d                 <log_level> can be one of: DEBUG, INFO, WARN, ERROR, NONE\n");
 }
 
 void print_version(const char* program_name) {
     printf("%s version %s\n", program_name, VERSION);
 }
 
-char* copy_ip_addr(const char* addr) {
-    int len = strlen(addr);
+char* copy_str(const char* str) {
+    int len = strlen(str);
     char* out = malloc(len + 1);
     if (out == NULL) return NULL;
-    strcpy(out, addr);
+    strcpy(out, str);
     return out;
 }
 
 parse_server_params_status parse_server_params(int argc, char **argv,
                                                server_config *config) {
-    printf("DEBUG: parse_server_params called with argc=%d\n", argc);
-    
     int opt;
-    while ((opt = getopt(argc, argv, "hl:L:p:P:u:Nv")) != -1) {
-        printf("DEBUG: Processing option '%c'\n", opt);
+    while ((opt = getopt(argc, argv, "hl:L:p:P:d:u:Nv")) != -1) {
         switch (opt) {
         case 'h':
             print_help(argv[0]);
@@ -44,20 +43,16 @@ parse_server_params_status parse_server_params(int argc, char **argv,
             print_version(argv[0]);
             return PARAMS_SHOULD_EXIT;
         case 'l':
-            config->socks_addr = copy_ip_addr(optarg);
-            printf("DEBUG: Set socks_addr to %s\n", optarg);
+            config->socks_addr = copy_str(optarg);
             break;
         case 'L':
-            config->pctp_addr = copy_ip_addr(optarg);
-            printf("DEBUG: Set pctp_addr to %s\n", optarg);
+            config->pctp_addr = copy_str(optarg);
             break;
         case 'p':
             config->socks_port = atoi(optarg);
-            printf("DEBUG: Set socks_port to %d\n", config->socks_port);
             break;
         case 'P':
             config->pctp_port = atoi(optarg);
-            printf("DEBUG: Set pctp_port to %d\n", config->pctp_port);
             break;
         case 'u':
             if (config->user_count >= MAX_INITIAL_USERS) {
@@ -73,19 +68,18 @@ parse_server_params_status parse_server_params(int argc, char **argv,
 
             sep[0] = '\0';
             add_user(config, optarg, &sep[1], ADMIN);
-            printf("DEBUG: Added user %s\n", optarg);
 
             break;
         case 'N':
             config->disectors_enabled = 0;
-            printf("DEBUG: Disabled disectors\n");
+            break;
+        case 'd':
+            config->log_level = copy_str(optarg);
             break;
         default:
-            printf("DEBUG: Unknown option '%c'\n", opt);
             break;
         }
     }
 
-    printf("DEBUG: parse_server_params returning PARAMS_SUCCESS\n");
     return PARAMS_SUCCESS;
 }

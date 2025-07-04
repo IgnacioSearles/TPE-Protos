@@ -24,6 +24,7 @@ typedef struct {
 typedef struct {
     char *socks_addr;
     char *pctp_addr;
+    char *log_level;
     uint16_t socks_port;
     uint16_t pctp_port;
     int disectors_enabled;

@@ -10,6 +10,7 @@
 #include "../shared/selector.h"
 #include "../shared/netutils.h"
 #include "client_params.h"
+#include <logger.h>
 
 #define BUFFER_SIZE 4096
 #define MAX_SELECTOR_FDS 2
@@ -79,7 +80,8 @@ int main(int argc, char *argv[]) {
     
     client_config config = {
         .host = NULL, 
-        .port = NULL
+        .port = NULL,
+        .log_level = NULL
     };
 
     if (client_params_parse(argc, argv, &config) < 0) {
@@ -87,9 +89,11 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
+    logger_set_level(config.log_level);
+
     int server_fd = connect_to_host(config.host, config.port);
     if (server_fd < 0) {
-        perror("client error: could not connect");
+        LOG(LOG_ERROR, "client error: could not connect");
         client_config_destroy(&config);
         return EXIT_FAILURE;
     }
@@ -114,7 +118,7 @@ int main(int argc, char *argv[]) {
     };
 
     if (selector_init(&selector_config) != SELECTOR_SUCCESS) {
-        perror("client error: could not init selector library");
+        LOG(LOG_ERROR, "client error: could not init selector library");
         client_config_destroy(&config);
         close(server_fd);
         return EXIT_FAILURE;
@@ -122,7 +126,7 @@ int main(int argc, char *argv[]) {
 
     fd_selector selector = selector_new(MAX_SELECTOR_FDS);
     if (selector == NULL) {
-        perror("client error: could not create selector");
+        LOG(LOG_ERROR, "client error: could not create selector");
         close(server_fd);
         client_config_destroy(&config);
         return EXIT_FAILURE;
@@ -133,7 +137,7 @@ int main(int argc, char *argv[]) {
         .handle_write = client_write,
     };
     if (selector_register(selector, server_fd, &client_handler, OP_READ, &data) != SELECTOR_SUCCESS) {
-        perror("client error: could not register server fd");
+        LOG(LOG_ERROR, "client error: could not register server fd");
         close(server_fd);
         client_config_destroy(&config);
         selector_destroy(selector);
@@ -144,7 +148,7 @@ int main(int argc, char *argv[]) {
         .handle_read = stdin_read,
     };
     if (selector_register(selector, STDIN_FILENO, &stdin_handler, OP_READ, &data) != SELECTOR_SUCCESS) {
-        perror("client error: could not register stdin fd");
+        LOG(LOG_ERROR, "client error: could not register stdin fd");
         close(server_fd);
         client_config_destroy(&config);
         selector_destroy(selector);

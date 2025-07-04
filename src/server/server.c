@@ -2,6 +2,7 @@
 #include <signal.h>
 #include "../shared/selector.h"
 #include "../shared/netutils.h"
+#include <logger.h>
 #include "server_params.h"
 #include "server_stats.h"
 #include "socks5.h"
@@ -26,19 +27,19 @@ static void accept_socks5(struct selector_key *key) {
     int client_fd = accept(key->fd, NULL, NULL);
 
     if (client_fd < 0) {
-        perror("server error: could not accept socks5 client");
+        LOG(LOG_WARN, "server error: could not accept socks5 client");
         return;
     }
 
     if (set_non_blocking(client_fd) < 0) {
         close(client_fd);
-        perror("server error: could not set socks5 client fd as non blocking");
+        LOG(LOG_WARN, "server error: could not set socks5 client fd as non blocking");
         return;
     }
 
     if (socks5_init(client_fd, key->s, &config, socks5_server_stats) < 0) {
         close(client_fd);
-        perror("server error: could not initialize SOCKS5");
+        LOG(LOG_WARN, "server error: could not initialize SOCKS5");
         return;
     }
 }
@@ -47,19 +48,19 @@ static void accept_pctp(struct selector_key *key) {
     int client_fd = accept(key->fd, NULL, NULL);
 
     if (client_fd < 0) {
-        perror("server error: could not accept PCTP client");
+        LOG(LOG_WARN, "server error: could not accept PCTP client");
         return;
     }
 
     if (set_non_blocking(client_fd) < 0) {
         close(client_fd);
-        perror("server error: could not set PCTP client fd as non blocking");
+        LOG(LOG_WARN, "server error: could not set PCTP client fd as non blocking");
         return;
     }
 
     if (pctp_init(client_fd, key->s, &config, socks5_server_stats) < 0){
         close(client_fd);
-        perror("server error: could not initialize PCTP");
+        LOG(LOG_WARN, "server error: could not initialize PCTP");
         return;
     }
 }
@@ -73,25 +74,27 @@ int main(int argc, char** argv) {
         return 0;
     }
 
+    logger_set_level(config.log_level);
+
     signal(SIGINT, handle_shutdown);  // Ctrl+C
     signal(SIGTERM, handle_shutdown); // kill pid
 
     socks5_server_stats = create_server_stats(); 
     if (socks5_server_stats == NULL) {
-        perror("server error: failed to create stats collector for SOCKS5 server");
+        LOG(LOG_ERROR, "server error: failed to create stats collector for SOCKS5 server");
         return EXIT_FAILURE;
     }
 
     int socks5_socket = create_passive_tcp_socket(config.socks_addr, config.socks_port, MAX_SOCKS5_CONNECTIONS); 
     if (socks5_socket < 0) {
-        perror("server error: failed to create SOCKS5 socket");
+        LOG(LOG_ERROR, "server error: failed to create SOCKS5 socket");
         destroy_config(&config);
         return EXIT_FAILURE;
     }
 
     int pctp_socket = create_passive_tcp_socket(config.pctp_addr, config.pctp_port, MAX_PCTP_CONNECTIONS);
     if (pctp_socket < 0) {
-        perror("server error: failed to create PCTP socket");
+        LOG(LOG_ERROR, "server error: failed to create PCTP socket");
         close(socks5_socket);
         destroy_config(&config);
         return EXIT_FAILURE;
@@ -106,7 +109,7 @@ int main(int argc, char** argv) {
     };
 
     if (selector_init(&selector_config) != SELECTOR_SUCCESS) {
-        perror("server error: could no init selector library");
+        LOG(LOG_ERROR, "server error: could no init selector library");
         close(socks5_socket);
         close(pctp_socket);
         destroy_config(&config);
@@ -115,7 +118,7 @@ int main(int argc, char** argv) {
 
     fd_selector selector = selector_new(MAX_CONNECTIONS);
     if (selector == NULL) {
-        perror("server errror: could no initialize selector");
+        LOG(LOG_ERROR, "server errror: could no initialize selector");
         close(socks5_socket);
         close(pctp_socket);
         destroy_config(&config);
@@ -126,7 +129,7 @@ int main(int argc, char** argv) {
         .handle_read = accept_socks5
     };
     if (selector_register(selector, socks5_socket, &socks5_accept_handler, OP_READ, NULL) != SELECTOR_SUCCESS) {
-        perror("server error: could not register socks5 socket in selector");
+        LOG(LOG_ERROR, "server error: could not register socks5 socket in selector");
         close(socks5_socket);
         close(pctp_socket);
         selector_destroy(selector);
@@ -138,7 +141,7 @@ int main(int argc, char** argv) {
         .handle_read = accept_pctp
     };
     if (selector_register(selector, pctp_socket, &pctp_accept_handler, OP_READ, NULL) != SELECTOR_SUCCESS) {
-        perror("server error: could not register pctp socket in selector");
+        LOG(LOG_ERROR, "server error: could not register pctp socket in selector");
         close(socks5_socket);
         close(pctp_socket);
         selector_destroy(selector);
@@ -149,7 +152,7 @@ int main(int argc, char** argv) {
     while (!done) {
         selector_status status = selector_select(selector);
         if (status != SELECTOR_SUCCESS && status != SELECTOR_MAXFD) {
-            perror("server error: fatal error in selection");
+            LOG(LOG_ERROR, "server error: fatal error in selection");
             break;
         }
     }

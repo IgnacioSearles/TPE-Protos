@@ -1,3 +1,4 @@
+#include <logger.h>
 #include <socks5.h>
 #include <server_stats.h>
 #include <socks5_protocol.h>
@@ -53,17 +54,16 @@ static const struct state_machine socks5_stm = {
 };
 
 int socks5_init(const int client_fd, fd_selector s, server_config* config, server_stats stats) {
-    printf("SOCKS5: Initializing connection (fd=%d)\n", client_fd);
+    LOG_A(LOG_DEBUG, "SOCKS5: Initializing connection (fd=%d)", client_fd);
     
-    // Configurar socket como no-bloqueante
     if (set_non_blocking(client_fd) < 0) {
-        printf("SOCKS5: Failed to set non-blocking\n");
+        LOG(LOG_WARN, "SOCKS5: Failed to set non-blocking");
         return -1;
     }
     
     socks5* socks = calloc(1, sizeof(*socks));
     if (socks == NULL) {
-        printf("SOCKS5: Failed to allocate memory\n");
+        LOG(LOG_WARN, "SOCKS5: Failed to allocate memory");
         return -1;
     }
 
@@ -84,13 +84,13 @@ int socks5_init(const int client_fd, fd_selector s, server_config* config, serve
     stm_init(&socks->stm);
     
     if (selector_register(s, client_fd, &socks5_handler, OP_READ, socks) != SELECTOR_SUCCESS) {
-        printf("SOCKS5: Failed to register with selector\n");
+        LOG(LOG_WARN, "SOCKS5: Failed to register with selector");
         free(socks);
         return -1;
     }
 
     log_connection_open(stats, client_fd);
-    printf("SOCKS5: Connection initialized successfully (fd=%d)\n", client_fd);
+    LOG_A(LOG_INFO, "SOCKS5: Connection initialized successfully (fd=%d)", client_fd);
 
     return 0;
 }
@@ -109,10 +109,10 @@ static void socks5_read(struct selector_key *key) {
     struct state_machine* stm = &ATTACHMENT(key)->stm;
     socks5_state next = stm_handler_read(stm, key);
     
-    printf("SOCKS5: Read event → state %d\n", next);
+    LOG_A(LOG_DEBUG, "SOCKS5: Read event → state %d", next);
     
     if (ERROR == next || DONE == next) {
-        printf("SOCKS5: Terminating connection (state=%d)\n", next);
+        LOG_A(LOG_DEBUG, "SOCKS5: Terminating connection (state=%d)", next);
         selector_unregister_fd(key->s, key->fd);
     } else {
         fd_interest interest = OP_NOOP;
@@ -123,7 +123,7 @@ static void socks5_read(struct selector_key *key) {
         }
         
         if (interest != OP_NOOP) {
-            printf("SOCKS5: Changing selector interest to %d\n", interest);
+            LOG_A(LOG_DEBUG, "SOCKS5: Changing selector interest to %d", interest);
             selector_set_interest_key(key, interest);
         }
     }
@@ -133,10 +133,10 @@ static void socks5_write(struct selector_key *key) {
     struct state_machine* stm = &ATTACHMENT(key)->stm;
     socks5_state next = stm_handler_write(stm, key);
     
-    printf("SOCKS5: Write event → state %d\n", next);
+    LOG_A(LOG_DEBUG, "SOCKS5: Write event → state %d", next);
     
     if (ERROR == next || DONE == next) {
-        printf("SOCKS5: Terminating connection (state=%d)\n", next);
+        LOG_A(LOG_DEBUG, "SOCKS5: Terminating connection (state=%d)", next);
         selector_unregister_fd(key->s, key->fd);
     } else {
         fd_interest interest = OP_NOOP;
@@ -147,7 +147,7 @@ static void socks5_write(struct selector_key *key) {
         }
 
         if (interest != OP_NOOP) {
-            printf("SOCKS5: Changing selector interest to %d\n", interest);
+            LOG_A(LOG_DEBUG, "SOCKS5: Changing selector interest to %d", interest);
             selector_set_interest_key(key, interest);
         }
     }
@@ -159,11 +159,11 @@ static void socks5_close(struct selector_key *key) {
         return;
     }
     
-    printf("SOCKS5: Cleaning up connection (client_fd=%d, origin_fd=%d)\n", socks->client_fd, socks->origin_fd);
+    LOG_A(LOG_DEBUG, "SOCKS5: Cleaning up connection (client_fd=%d, origin_fd=%d)", socks->client_fd, socks->origin_fd);
     log_connection_close(socks->stats, socks->client_fd);
 
     if (socks->origin_fd >= 0) {
-        printf("SOCKS5: Unregistering origin_fd=%d from selector\n", socks->origin_fd);
+        LOG_A(LOG_DEBUG, "SOCKS5: Unregistering origin_fd=%d from selector", socks->origin_fd);
         selector_unregister_fd(key->s, socks->origin_fd);
         close(socks->origin_fd);
         socks->origin_fd = -1;

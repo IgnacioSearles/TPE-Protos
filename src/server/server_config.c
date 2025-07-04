@@ -17,6 +17,7 @@ server_config create_config() {
     server_config config = {
         .socks_addr = NULL,
         .pctp_addr = NULL,
+        .log_level = NULL,
         .socks_port = SOCKS5_STD_PORT,
         .pctp_port = PCTP_STD_PORT,
         .disectors_enabled = 1,
@@ -33,5 +34,9 @@ void destroy_config(server_config* config) {
 
     if (config->pctp_addr != NULL) {
         free(config->pctp_addr);
+    }
+
+    if (config->log_level != NULL) {
+        free(config->log_level);
     }
 }

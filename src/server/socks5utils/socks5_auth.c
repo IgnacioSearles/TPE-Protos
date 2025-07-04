@@ -1,5 +1,6 @@
 #include "server_stats.h"
 #include <socks5_auth.h>
+#include <logger.h>
 #include <socks5_protocol.h>
 #include <server_config.h>
 #include <buffer.h>
@@ -11,7 +12,7 @@
 socks5_state auth_read(struct selector_key *key) {
     struct socks5* data = ATTACHMENT(key);
     
-    printf("AUTH_READ: Reading credentials\n");
+    LOG(LOG_DEBUG, "AUTH_READ: Reading credentials");
     
     size_t count;
     uint8_t* ptr = buffer_write_ptr(&data->read_buffer, &count);
@@ -26,7 +27,7 @@ socks5_state auth_read(struct selector_key *key) {
             socks5_auth_parser_result result = parse_socks5_auth(read_ptr, count, data->config);
             
             if (result.valid) {
-                printf("AUTH_READ: Parsed - user='%s'\n", result.username);
+                LOG_A(LOG_DEBUG, "AUTH_READ: Parsed - user='%s'", result.username);
         
                 bool auth_ok = false;
                 if (data->config) {
@@ -37,13 +38,13 @@ socks5_state auth_read(struct selector_key *key) {
                             strcmp(user.pass, result.password) == 0) {
                             log_user_authenticated(data->stats, data->client_fd, user.user);
                             auth_ok = true;
-                            printf("AUTH_READ: Credentials match user[%d]\n", i);
+                            LOG_A(LOG_DEBUG, "AUTH_READ: Credentials match user[%d]", i);
                             found = true;
                         }
                     }
                 }
                 
-                printf("AUTH_READ: Authentication %s\n", auth_ok ? "SUCCESS" : "FAILED");
+                LOG_A(LOG_DEBUG, "AUTH_READ: Authentication %s", auth_ok ? "SUCCESS" : "FAILED");
                 
                 size_t consumed = 2 + strlen(result.username) + 1 + strlen(result.password);
                 buffer_read_adv(&data->read_buffer, consumed);
@@ -53,7 +54,7 @@ socks5_state auth_read(struct selector_key *key) {
             }
         }
     } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-        printf("AUTH_READ: Error reading: %s\n", strerror(errno));
+        LOG_A(LOG_DEBUG, "AUTH_READ: Error reading: %s", strerror(errno));
         return ERROR;
     }
     
@@ -63,7 +64,7 @@ socks5_state auth_read(struct selector_key *key) {
 socks5_state auth_write(struct selector_key *key) {
     struct socks5* data = ATTACHMENT(key);
     
-    printf("AUTH_WRITE: Sending result (%s)\n", data->auth_ok ? "SUCCESS" : "FAILURE");
+    LOG_A(LOG_DEBUG, "AUTH_WRITE: Sending result (%s)", data->auth_ok ? "SUCCESS" : "FAILURE");
     
     auth_response response = create_auth_response(data->auth_ok ? AUTH_SUCCESS : AUTH_FAILURE);
     
@@ -82,19 +83,19 @@ socks5_state auth_write(struct selector_key *key) {
             
             if (!buffer_can_read(&data->write_buffer)) {
                 if (!data->auth_ok) {
-                    printf("AUTH_WRITE: Authentication failed - terminating\n");
+                    LOG(LOG_DEBUG, "AUTH_WRITE: Authentication failed - terminating");
                     return ERROR;
                 } else {
-                    printf("AUTH_WRITE: → Transitioning to REQUEST_READ\n");
+                    LOG(LOG_DEBUG, "AUTH_WRITE: → Transitioning to REQUEST_READ");
                     return REQUEST_READ;
                 }
             }
         } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-            printf("AUTH_WRITE: Error sending: %s\n", strerror(errno));
+            LOG_A(LOG_DEBUG, "AUTH_WRITE: Error sending: %s", strerror(errno));
             return ERROR;
         }
     } else {
-        printf("AUTH_WRITE: Buffer full - cannot fit response\n");
+        LOG(LOG_DEBUG, "AUTH_WRITE: Buffer full - cannot fit response");
         return ERROR;
     }
 

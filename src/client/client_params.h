@@ -4,6 +4,7 @@
 typedef struct {
     char* host;
     char* port;
+    char* log_level;
 } client_config;
 
 /*

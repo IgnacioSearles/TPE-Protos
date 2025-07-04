@@ -1,5 +1,6 @@
 #include "pctp.h"
 #include "./pctputils/ptctp_parser_tables.h"
+#include "logger.h"
 #include "server_stats.h"
 #include <stdlib.h>
 #include <stdio.h>
@@ -225,27 +226,27 @@ static unsigned login_user_read(struct selector_key *key) {
 
     buffer_write_adv(read_buffer, n);
 
-    printf("Received %ld bytes in LOGIN_USER_READ\n", n);
+    LOG_A(LOG_DEBUG, "Received %ld bytes in LOGIN_USER_READ", n);
 
     while (buffer_can_read(read_buffer)) {
         uint8_t c = buffer_read(read_buffer);
         const struct parser_event* e = parser_feed(pctp_data->user_parser, c);
         if (e->type == TYPE_SUCCESS) {
-            printf("User parser succeded\n");
-            printf("Username: %.*s\n", pctp_data->username_len, pctp_data->username);
+            LOG(LOG_DEBUG, "User parser succeded");
+            LOG_A(LOG_DEBUG, "Username: %.*s", pctp_data->username_len, pctp_data->username);
 
             pctp_data->id = check_admin_username(pctp_data);
             if (pctp_data->id != -1) {
-                printf("Username is correct\n");
+                LOG(LOG_DEBUG, "Username is correct");
                 write_msg_to_buffer(&pctp_data->write_buffer, OK_USER_MSG);
                 return LOGIN_USER_SUCCESS_WRITE;
             }
-            printf("Username is incorrect\n");
+            LOG(LOG_DEBUG, "Username is incorrect");
             write_msg_to_buffer(&pctp_data->write_buffer, ERR_INVALID_USER_MSG);
             return LOGIN_USER_INVALID_WRITE;
         }
         if (e->type == TYPE_ERROR) {
-            printf("User parser failed\n");
+            LOG(LOG_DEBUG, "User parser failed");
             write_msg_to_buffer(&pctp_data->write_buffer, ERR_INVALID_COMMAND_MSG);
             return LOGIN_USER_ERROR_WRITE;
         }
@@ -276,27 +277,27 @@ static unsigned login_pass_read(struct selector_key *key) {
 
     buffer_write_adv(read_buffer, n);
 
-    printf("Received %ld bytes in LOGIN_PASS_READ\n", n);
+    LOG_A(LOG_DEBUG, "Received %ld bytes in LOGIN_PASS_READ", n);
 
     while (buffer_can_read(read_buffer)) {
         uint8_t c = buffer_read(read_buffer);
         const struct parser_event* e = parser_feed(pctp_data->pass_parser, c);
         if (e->type == TYPE_SUCCESS) {
-            printf("Pass parser succeded\n");
-            printf("Password: %.*s\n", pctp_data->password_len, pctp_data->password);
+            LOG(LOG_DEBUG, "Pass parser succeded");
+            LOG_A(LOG_DEBUG, "Password: %.*s", pctp_data->password_len, pctp_data->password);
 
             int id = check_admin_password(pctp_data);
             if (id != -1) {
-                printf("Password is correct\n");
+                LOG(LOG_DEBUG, "Password is correct");
                 write_msg_to_buffer(&pctp_data->write_buffer, OK_PASS_MSG);
                 return LOGIN_PASS_SUCCESS_WRITE;
             }
-            printf("Password is incorrect\n");
+            LOG(LOG_DEBUG, "Password is incorrect");
             write_msg_to_buffer(&pctp_data->write_buffer, ERR_INVALID_PASS_MSG);
             return LOGIN_PASS_INVALID_WRITE;
         }
         if (e->type == TYPE_ERROR) {
-            printf("Pass parser failed\n");
+            LOG(LOG_DEBUG, "Pass parser failed");
             write_msg_to_buffer(&pctp_data->write_buffer, ERR_INVALID_COMMAND_MSG);
             return LOGIN_PASS_ERROR_WRITE;
         }
@@ -328,34 +329,34 @@ static unsigned main_read(struct selector_key *key) {
 
     buffer_write_adv(read_buffer, n);
 
-    printf("Received %ld bytes in MAIN\n", n);
+    LOG_A(LOG_DEBUG, "Received %ld bytes in MAIN", n);
 
     while (buffer_can_read(read_buffer)) {
         uint8_t c = buffer_read(read_buffer);
         const struct parser_event* add_event = parser_feed(pctp_data->add_parser, c);
         const struct parser_event* exit_event = parser_feed(pctp_data->exit_parser, c);
         if (add_event->type == TYPE_BASIC) {
-            printf("Main parser succeded\n");
-            printf("Command: add basic\n");
+            LOG(LOG_DEBUG, "Main parser succeded");
+            LOG(LOG_DEBUG, "Command: add basic");
             pctp_data->level = BASIC;
             write_msg_to_buffer(&pctp_data->write_buffer, OK_ADD_MSG);
             return ADD_WRITE;
         }
         if (add_event->type == TYPE_ADMIN) {
-            printf("Main parser succeded\n");
-            printf("Command: add admin\n");
+            LOG(LOG_DEBUG, "Main parser succeded");
+            LOG(LOG_DEBUG, "Command: add admin");
             pctp_data->level = ADMIN;
             write_msg_to_buffer(&pctp_data->write_buffer, OK_ADD_MSG);
             return ADD_WRITE;
         }
         if (exit_event->type == TYPE_SUCCESS) {
-            printf("Main parser succeded\n");
-            printf("Command: exit\n");
+            LOG(LOG_DEBUG, "Main parser succeded");
+            LOG(LOG_DEBUG, "Command: exit");
             write_msg_to_buffer(&pctp_data->write_buffer, OK_DONE_MSG);
             return EXIT_WRITE;
         }
         if (add_event->type == TYPE_ERROR && exit_event->type == TYPE_ERROR) {
-            printf("Main parsers failed\n");
+            LOG(LOG_DEBUG, "Main parsers failed");
             write_msg_to_buffer(&pctp_data->write_buffer, ERR_INVALID_COMMAND_MSG);
             return MAIN_ERROR_WRITE;
         }
@@ -428,7 +429,7 @@ static int send_buffer_msg(int fd, buffer* write_buffer) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 return MSG_SEND_BLOCKED;
             } else {
-                printf("Send failed\n");
+                LOG(LOG_DEBUG, "Send failed");
                 return MSG_SEND_ERROR;
             }
         }
@@ -553,27 +554,27 @@ static unsigned add_user_read(struct selector_key *key) {
 
     buffer_write_adv(read_buffer, n);
 
-    printf("Received %ld bytes in ADD_USER_READ\n", n);
+    LOG_A(LOG_DEBUG, "Received %ld bytes in ADD_USER_READ", n);
 
     while (buffer_can_read(read_buffer)) {
         uint8_t c = buffer_read(read_buffer);
         const struct parser_event* e = parser_feed(pctp_data->user_parser, c);
         if (e->type == TYPE_SUCCESS) {
-            printf("User parser succeded\n");
-            printf("Username: %.*s\n", pctp_data->new_username_len, pctp_data->new_username);
+            LOG(LOG_DEBUG, "User parser succeded");
+            LOG_A(LOG_DEBUG, "Username: %.*s", pctp_data->new_username_len, pctp_data->new_username);
 
             pctp_data->id = check_new_username(pctp_data);
             if (pctp_data->id == -1) {
-                printf("New username is valid\n");
+                LOG(LOG_DEBUG, "New username is valid");
                 write_msg_to_buffer(&pctp_data->write_buffer, OK_USER_MSG);
                 return ADD_USER_SUCCESS_WRITE;
             }
-            printf("Username already exists\n");
+            LOG(LOG_DEBUG, "Username already exists");
             write_msg_to_buffer(&pctp_data->write_buffer, ERR_INVALID_USER_MSG);
             return ADD_USER_INVALID_WRITE;
         }
         if (e->type == TYPE_ERROR) {
-            printf("User parser failed\n");
+            LOG(LOG_DEBUG, "User parser failed");
             write_msg_to_buffer(&pctp_data->write_buffer, ERR_INVALID_COMMAND_MSG);
             return ADD_USER_ERROR_WRITE;
         }
@@ -643,22 +644,22 @@ static unsigned add_pass_read(struct selector_key *key) {
 
     buffer_write_adv(read_buffer, n);
 
-    printf("Received %ld bytes in ADD_PASS_READ\n", n);
+    LOG_A(LOG_DEBUG, "Received %ld bytes in ADD_PASS_READ", n);
 
     while (buffer_can_read(read_buffer)) {
         uint8_t c = buffer_read(read_buffer);
         const struct parser_event* e = parser_feed(pctp_data->pass_parser, c);
         if (e->type == TYPE_SUCCESS) {
-            printf("Pass parser succeded\n");
-            printf("Password: %.*s\n", pctp_data->new_password_len, pctp_data->new_password);
-            printf("Password set\n");
+            LOG(LOG_DEBUG, "Pass parser succeded");
+            LOG_A(LOG_DEBUG, "Password: %.*s", pctp_data->new_password_len, pctp_data->new_password);
+            LOG(LOG_DEBUG, "Password set");
             
             char* new_user = malloc(sizeof(char) * (pctp_data->new_username_len+1));
             char* new_pass = malloc(sizeof(char) * (pctp_data->new_password_len+1));
             if (new_user == NULL || new_pass == NULL) {
                 free(new_user);
                 free(new_pass);
-                printf("Could not add credentials\n");
+                LOG(LOG_DEBUG, "Could not add credentials");
                 write_msg_to_buffer(&pctp_data->write_buffer, ERR_OOM_MSG);
                 return ADD_PASS_ERROR_WRITE;
             }
@@ -669,12 +670,12 @@ static unsigned add_pass_read(struct selector_key *key) {
             new_pass[pctp_data->new_password_len] = 0;
 
             add_user(pctp_data->config, new_user, new_pass, pctp_data->level);
-            printf("Added new user credentials\n");
+            LOG(LOG_DEBUG, "Added new user credentials");
             write_msg_to_buffer(&pctp_data->write_buffer, OK_ADD_PASS_MSG);
             return ADD_PASS_SUCCESS_WRITE;
         }
         if (e->type == TYPE_ERROR) {
-            printf("Pass parser failed\n");
+            LOG(LOG_DEBUG, "Pass parser failed");
             write_msg_to_buffer(&pctp_data->write_buffer, ERR_INVALID_COMMAND_MSG);
             return ADD_PASS_ERROR_WRITE;
         }
@@ -739,5 +740,5 @@ static void on_close(const unsigned state, struct selector_key *key) {
         selector_unregister_fd(key->s, pctp_data->client_fd);
     }
     free(pctp_data);
-    printf("Closed PCTP session.\n");
+    LOG(LOG_DEBUG, "Closed PCTP session.");
 }

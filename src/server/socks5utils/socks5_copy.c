@@ -1,4 +1,5 @@
 #include "server_stats.h"
+#include <logger.h>
 #include <socks5_copy.h>
 #include <selector.h>
 #include <buffer.h>
@@ -14,20 +15,20 @@ const struct fd_handler origin_handler = {
 void copy_on_arrival(const unsigned state, struct selector_key *key) {
     struct socks5* data = ATTACHMENT(key);
     
-    printf("COPY: Entering tunnel mode - registering origin_fd=%d\n", data->origin_fd);
+    LOG_A(LOG_DEBUG, "COPY: Entering tunnel mode - registering origin_fd=%d", data->origin_fd);
     
     if (selector_register(key->s, data->origin_fd, &origin_handler, OP_READ, data) != SELECTOR_SUCCESS) {
-        printf("COPY: Failed to register origin_fd in selector\n");
+        LOG(LOG_DEBUG, "COPY: Failed to register origin_fd in selector");
     } else {
-        printf("COPY: Origin registered - bidirectional tunnel active\n");
-        printf("COPY: Cliente[%d] ←→ Proxy ←→ Origin[%d]\n", data->client_fd, data->origin_fd);
+        LOG(LOG_DEBUG, "COPY: Origin registered - bidirectional tunnel active");
+        LOG_A(LOG_DEBUG, "COPY: Cliente[%d] ←→ Proxy ←→ Origin[%d]", data->client_fd, data->origin_fd);
     }
 }
 
 socks5_state copy_r(struct selector_key *key) {
     struct socks5* data = ATTACHMENT(key);
     
-    printf("COPY_R: Reading from client\n");
+    LOG(LOG_DEBUG, "COPY_R: Reading from client");
     
     size_t count;
     uint8_t* ptr = buffer_write_ptr(&data->read_buffer, &count);
@@ -35,7 +36,7 @@ socks5_state copy_r(struct selector_key *key) {
     
     if (n > 0) {
         buffer_write_adv(&data->read_buffer, n);
-        printf("COPY_R: Received %ld bytes from client → forwarding to origin[%d]\n", n, data->origin_fd);
+        LOG_A(LOG_DEBUG, "COPY_R: Received %ld bytes from client → forwarding to origin[%d]", n, data->origin_fd);
         
         uint8_t* read_ptr = buffer_read_ptr(&data->read_buffer, &count);
         if (count > 0) {
@@ -43,17 +44,17 @@ socks5_state copy_r(struct selector_key *key) {
             if (sent > 0) {
                 log_bytes_proxied(data->stats, data->client_fd, sent);
                 buffer_read_adv(&data->read_buffer, sent);
-                printf("COPY_R: Forwarded %ld bytes to origin\n", sent);
+                LOG_A(LOG_DEBUG, "COPY_R: Forwarded %ld bytes to origin", sent);
             } else if (sent < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-                printf("COPY_R: Error forwarding to origin: %s\n", strerror(errno));
+                LOG_A(LOG_DEBUG, "COPY_R: Error forwarding to origin: %s", strerror(errno));
                 return ERROR;
             }
         }
     } else if (n == 0) {
-        printf("COPY_R: Client closed connection\n");
+        LOG(LOG_DEBUG, "COPY_R: Client closed connection");
         return DONE;
     } else if (errno != EAGAIN && errno != EWOULDBLOCK) {
-        printf("COPY_R: Error reading from client: %s\n", strerror(errno));
+        LOG_A(LOG_DEBUG, "COPY_R: Error reading from client: %s", strerror(errno));
         return ERROR;
     }
     
@@ -63,7 +64,7 @@ socks5_state copy_r(struct selector_key *key) {
 socks5_state copy_w(struct selector_key *key) {
     struct socks5* data = ATTACHMENT(key);
    
-    printf("COPY_W: Writing to client (buffered data)\n");
+    LOG(LOG_DEBUG, "COPY_W: Writing to client (buffered data)");
     
     size_t count;
     uint8_t* ptr = buffer_read_ptr(&data->write_buffer, &count);
@@ -74,20 +75,20 @@ socks5_state copy_w(struct selector_key *key) {
             log_bytes_proxied(data->stats, data->client_fd, n);
 
             buffer_read_adv(&data->write_buffer, n);
-            printf("COPY_W: Sent %ld bytes to client from buffer\n", n);
+            LOG_A(LOG_DEBUG, "COPY_W: Sent %ld bytes to client from buffer", n);
             
             size_t remaining;
             buffer_read_ptr(&data->write_buffer, &remaining);
             if (remaining == 0) {
-                printf("COPY_W: All buffered data sent - back to read mode\n");
+                LOG(LOG_DEBUG, "COPY_W: All buffered data sent - back to read mode");
                 selector_set_interest_key(key, OP_READ);
             }
         } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
-            printf("COPY_W: Error writing to client: %s\n", strerror(errno));
+            LOG_A(LOG_DEBUG, "COPY_W: Error writing to client: %s", strerror(errno));
             return ERROR;
         }
     } else {
-        printf("COPY_W: No pending data to send\n");
+        LOG(LOG_DEBUG, "COPY_W: No pending data to send");
         selector_set_interest_key(key, OP_READ);
     }
     
@@ -97,7 +98,7 @@ socks5_state copy_w(struct selector_key *key) {
 void origin_read(struct selector_key *key) {
     struct socks5* data = ATTACHMENT(key);
     
-    printf("ORIGIN_READ: Reading from remote server\n");
+    LOG(LOG_DEBUG, "ORIGIN_READ: Reading from remote server");
     
     size_t count;
     uint8_t* ptr = buffer_write_ptr(&data->write_buffer, &count);
@@ -105,7 +106,7 @@ void origin_read(struct selector_key *key) {
     
     if (n > 0) {
         buffer_write_adv(&data->write_buffer, n);
-        printf("ORIGIN_READ: Received %ld bytes from origin → forwarding to client\n", n);
+        LOG_A(LOG_DEBUG, "ORIGIN_READ: Received %ld bytes from origin → forwarding to client", n);
         
         uint8_t *read_ptr = buffer_read_ptr(&data->write_buffer, &count);
         if (count > 0) {
@@ -114,33 +115,33 @@ void origin_read(struct selector_key *key) {
                 log_bytes_proxied(data->stats, data->client_fd, sent);
 
                 buffer_read_adv(&data->write_buffer, sent);
-                printf("ORIGIN_READ: Forwarded %ld bytes to client immediately\n", sent);
+                LOG_A(LOG_DEBUG, "ORIGIN_READ: Forwarded %ld bytes to client immediately", sent);
             } else if (sent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-                printf("ORIGIN_READ: Client not ready - data buffered for later\n");
+                LOG(LOG_DEBUG, "ORIGIN_READ: Client not ready - data buffered for later");
                 selector_set_interest(key->s, data->client_fd, OP_WRITE);
             } else if (sent < 0) {
-                printf("ORIGIN_READ: Error sending to client: %s\n", strerror(errno));
+                LOG_A(LOG_DEBUG, "ORIGIN_READ: Error sending to client: %s", strerror(errno));
                 selector_unregister_fd(key->s, key->fd);
                 return;
             }
         }
     } else if (n == 0) {
-        printf("ORIGIN_READ: Remote server closed connection\n");
+        LOG(LOG_DEBUG, "ORIGIN_READ: Remote server closed connection");
         
         size_t pending_count;
         buffer_read_ptr(&data->write_buffer, &pending_count);
         
         if (pending_count > 0) {
-            printf("ORIGIN_READ: %zu bytes pending for client - keeping connection\n", pending_count);
+            LOG_A(LOG_DEBUG, "ORIGIN_READ: %zu bytes pending for client - keeping connection", pending_count);
             selector_set_interest(key->s, data->client_fd, OP_WRITE);
         } else {
-            printf("ORIGIN_READ: No pending data - closing client connection\n");
+            LOG(LOG_DEBUG, "ORIGIN_READ: No pending data - closing client connection");
             selector_unregister_fd(key->s, data->client_fd);
         }
         
         selector_unregister_fd(key->s, key->fd);
     } else if (errno != EAGAIN && errno != EWOULDBLOCK) {
-        printf("ORIGIN_READ: Error reading from origin: %s\n", strerror(errno));
+        LOG_A(LOG_DEBUG, "ORIGIN_READ: Error reading from origin: %s", strerror(errno));
         selector_unregister_fd(key->s, key->fd);
     }
 }

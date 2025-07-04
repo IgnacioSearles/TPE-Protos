@@ -27,7 +27,6 @@ typedef struct {
     char *log_level;
     uint16_t socks_port;
     uint16_t pctp_port;
-    int disectors_enabled;
     server_user users[MAX_USERS];
     int user_count;
 } server_config;

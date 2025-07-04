@@ -28,6 +28,7 @@
 #define TOTAL_CONNECTIONS_MSG "total_connections: %ld\n"
 #define CURRENT_BYTES_PROXIED_MSG "current_bytes_proxied: %ld\n"
 #define TOTAL_BYTES_PROXIED_MSG "total_bytes_proxied: %ld\n"
+#define LOG_ENTRY_MSG "%s\tA\t%s\t%d\t%s\t%d\t%d\t%ld\t%s\t%s"
 #define EMPTY_MSG "\n"
 
 #define ERR_INVALID_USER_MSG "-ERR Invalid username\n"
@@ -391,9 +392,9 @@ static unsigned main_read(struct selector_key *key) {
             while(has_next_server_connection_entry(pctp_data->stats) && logs_to_send-- > 0) {
                 server_connection_entry* entry = get_next_server_connection_entry(pctp_data->stats);
                 char log_entry[MAX_MSG_SIZE];
-                sprintf(log_entry, LOG_ENTRY_FORMAT, entry->user, entry->source_host, entry->source_port, entry->target_host, entry->target_port, entry->reply_code);
+                sprintf(log_entry, LOG_ENTRY_MSG, entry->user, entry->source_host, entry->source_port, entry->target_host, entry->target_port,
+                        entry->reply_code, entry->bytes_proxied, entry->auth_success == AUTHENTICATED ? "Auth" : "No auth", ctime(&entry->timestamp));
                 write_msg_to_buffer(&pctp_data->write_buffer, log_entry);
-                write_msg_to_buffer(&pctp_data->write_buffer, EMPTY_MSG);
             }
             write_msg_to_buffer(&pctp_data->write_buffer, EMPTY_MSG);
             return LOGS_WRITE;

@@ -36,7 +36,6 @@ server_config create_config() {
         .log_level = NULL,
         .socks_port = SOCKS5_STD_PORT,
         .pctp_port = PCTP_STD_PORT,
-        .disectors_enabled = 1,
         .user_count = 0
     };
 

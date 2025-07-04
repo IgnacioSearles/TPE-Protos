@@ -3,6 +3,7 @@
 #include <logger.h>
 #include <fcntl.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -53,7 +54,17 @@ static server_connection_log_entry* find_log_entry_by_fd(server_stats stats, int
 }
 
 static void print_log_entry(server_connection_entry* entry) {
-    LOG_A(LOG_INFO, "%s\tA\t%s\t%d\t%s\t%d\t%d", entry->user, entry->source_host, entry->source_port, entry->target_host, entry->target_port, entry->reply_code); 
+    struct tm *t = localtime(&entry->timestamp);
+
+    // Not using the logger here because a human is not a computer.
+    printf("%d-%02d-%02dT%02d:%02d:%02dZ\t%s\tA\t%s\t%d\t%s\t%d\t%d\n", 
+            t->tm_year + TM_YEAR_RELATIVE, t->tm_mon + TM_MONTH_RELATIVE, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec,
+            entry->user, 
+            entry->source_host, 
+            entry->source_port, 
+            entry->target_host, 
+            entry->target_port, 
+            entry->reply_code); 
 }
 
 void log_connection_open(server_stats stats, int client_fd) {

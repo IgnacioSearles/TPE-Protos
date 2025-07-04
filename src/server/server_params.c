@@ -14,7 +14,6 @@ void print_help(const char *program_name) {
     printf("  -p <port>          SOCKS port (default %d)\n", SOCKS5_STD_PORT);
     printf("  -P <port>          PCTP port (default %d)\n", PCTP_STD_PORT);
     printf("  -u <user:pass>     adds an initial ADMIN user (max %d)\n", MAX_INITIAL_USERS);
-    printf("  -N                 allows password disserters\n");
     printf("  -v                 shows version and terminates\n");
     printf("  -d                 <log_level> can be one of: DEBUG, INFO, WARN, ERROR, NONE\n");
 }
@@ -34,7 +33,7 @@ char* copy_str(const char* str) {
 parse_server_params_status parse_server_params(int argc, char **argv,
                                                server_config *config) {
     int opt;
-    while ((opt = getopt(argc, argv, "hl:L:p:P:d:u:Nv")) != -1) {
+    while ((opt = getopt(argc, argv, "hl:L:p:P:d:u:v")) != -1) {
         switch (opt) {
         case 'h':
             print_help(argv[0]);
@@ -69,9 +68,6 @@ parse_server_params_status parse_server_params(int argc, char **argv,
             sep[0] = '\0';
             add_user(config, optarg, &sep[1], ADMIN);
 
-            break;
-        case 'N':
-            config->disectors_enabled = 0;
             break;
         case 'd':
             config->log_level = copy_str(optarg);

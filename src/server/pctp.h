@@ -42,6 +42,7 @@ typedef struct pctp {
     struct parser *stats_parser;
     struct parser *logs_parser;
     struct parser *add_parser;
+    struct parser *del_parser;
     // struct parser *config_parser;
     struct parser *exit_parser;
 
@@ -58,6 +59,9 @@ typedef struct pctp {
     char new_password[MAX_CREDENTIAL_SIZE];
     int new_password_len;
     int level;
+
+    char del_username[MAX_CREDENTIAL_SIZE];
+    int del_username_len;
 
     char logs_n[MAX_LOGS_DIGITS+1];
     int logs_n_len;

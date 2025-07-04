@@ -13,6 +13,22 @@ int add_user(server_config* config, char* user, char* pass, user_role role) {
     return 0;
 }
 
+int del_user(server_config* config, char* user_to_del, int name_len) {
+    if (config->user_count == 0)
+        return -1;
+    int i;
+    for (i=0; i<config->user_count; i++) {
+        server_user user = config->users[i];
+        int username_len = strlen(user.user);
+        if (name_len == username_len && strncmp(user_to_del, user.user, name_len) == 0) 
+            break;
+    }
+    if (i == config->user_count) return -1;
+    config->user_count--;
+    for (; i<config->user_count; i++) config->users[i] = config->users[i+1];
+    return 0;
+}
+
 server_config create_config() {
     server_config config = {
         .socks_addr = NULL,

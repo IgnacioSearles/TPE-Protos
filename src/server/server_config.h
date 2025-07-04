@@ -2,6 +2,7 @@
 #define SERVER_CONFIG_H
 
 #include <stdint.h>
+#include <string.h>
 
 #define SOCKS5_STD_PORT 1080
 #define PCTP_STD_PORT 8080
@@ -39,6 +40,14 @@ typedef struct {
  *
  * */
 int add_user(server_config* config, char* user, char* pass, user_role role);
+
+/*
+ *  Borra un usuario del servidor
+ *
+ *  Retorna < 0 si no pudo remover el usuario
+ *
+ * */
+int del_user(server_config* config, char* user_to_del, int name_len);
 
 /*
  *  Crea la configuracion inicial se guarda en el stack, no hace malloc

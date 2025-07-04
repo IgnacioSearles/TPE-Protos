@@ -7,6 +7,8 @@
 
 #define MAX_HOST_LEN 100
 
+#define LOG_ENTRY_FORMAT "%s\tA\t%s\t%d\t%s\t%d\t%d"
+
 typedef struct server_stats_cdt* server_stats;
 
 typedef enum {

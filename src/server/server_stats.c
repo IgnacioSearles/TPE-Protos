@@ -53,7 +53,7 @@ static server_connection_log_entry* find_log_entry_by_fd(server_stats stats, int
 }
 
 static void print_log_entry(server_connection_entry* entry) {
-    LOG_A(LOG_INFO, "%s\tA\t%s\t%d\t%s\t%d\t%d", entry->user, entry->source_host, entry->source_port, entry->target_host, entry->target_port, entry->reply_code); 
+    LOG_A(LOG_INFO, LOG_ENTRY_FORMAT, entry->user, entry->source_host, entry->source_port, entry->target_host, entry->target_port, entry->reply_code); 
 }
 
 void log_connection_open(server_stats stats, int client_fd) {

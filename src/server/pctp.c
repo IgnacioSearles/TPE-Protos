@@ -1,5 +1,5 @@
 #include "pctp.h"
-#include "./pctputils/ptctp_parser_tables.h"
+#include "./pctputils/pctp_parser_tables.h"
 #include "logger.h"
 #include "server_stats.h"
 #include <stdlib.h>
@@ -9,6 +9,8 @@
 #include <string.h>
 #include <errno.h>
 
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+
 // Includes para macOS
 #ifndef MSG_NOSIGNAL
 #define MSG_NOSIGNAL 0
@@ -17,6 +19,7 @@
 #define OK_USER_MSG "+OK Please send password\n"
 #define OK_PASS_MSG "+OK Succesfully logged in\n"
 #define OK_STATS_MSG "+OK Sending stats...\n"
+#define OK_LOGS_MSG "+OK Sending logs...\n"
 #define OK_ADD_MSG "+OK Please provide new user credentials\n"
 #define OK_ADD_PASS_MSG "+OK Succesfully added user\n"
 #define OK_DONE_MSG "+OK Done\n"
@@ -44,6 +47,7 @@ enum pctp_states {
     MAIN_READ,
     MAIN_ERROR_WRITE,
     STATS_WRITE,
+    LOGS_WRITE,
     ADD_WRITE,
     ADD_USER_READ,
     ADD_USER_SUCCESS_WRITE,
@@ -74,11 +78,14 @@ static unsigned login_pass_error_write(struct selector_key *key);
 
 static unsigned main_read(struct selector_key *key);
 static void reset_main_state(const unsigned state, struct selector_key *key);
+static void reset_logs_state(const unsigned state, struct selector_key *key);
 static void reset_add_state(const unsigned state, struct selector_key *key);
 
 static unsigned main_error_write(struct selector_key *key);
 
 static unsigned stats_write(struct selector_key *key);
+
+static unsigned logs_write(struct selector_key *key);
 
 static unsigned add_write(struct selector_key *key);
 
@@ -131,6 +138,7 @@ static const struct state_definition states[] = {
     { .state = MAIN_READ,                   .on_arrival = selector_set_interest_read, .on_read_ready = main_read },
     { .state = MAIN_ERROR_WRITE,            .on_arrival = selector_set_interest_write, .on_write_ready = main_error_write, .on_departure = reset_main_state },
     { .state = STATS_WRITE,                 .on_arrival = selector_set_interest_write, .on_write_ready = stats_write, .on_departure = reset_main_state },
+    { .state = LOGS_WRITE,                   .on_arrival = selector_set_interest_write, .on_write_ready = logs_write, .on_departure = reset_main_state },
     { .state = ADD_WRITE,                   .on_arrival = selector_set_interest_write, .on_write_ready = add_write, .on_departure = reset_main_state },
     { .state = ADD_USER_READ,               .on_arrival = selector_set_interest_read, .on_read_ready = add_user_read },
     { .state = ADD_USER_SUCCESS_WRITE,      .on_arrival = selector_set_interest_write, .on_write_ready = add_user_success_write },
@@ -174,12 +182,14 @@ int pctp_init(const int client_fd, fd_selector selector, server_config* config, 
     }
     for (int c = '0'; c <= '9'; c++){
         parser_classes[c] |= CLASS_ALNUM;
+        parser_classes[c] |= CLASS_NUM;
     }
 
     // TODO: init parsers
     pctp_data->user_parser = parser_init(parser_classes, &user_parser_def);
     pctp_data->pass_parser = parser_init(parser_classes, &pass_parser_def);
     pctp_data->stats_parser = parser_init(parser_no_classes(), &stats_parser_def);
+    pctp_data->logs_parser = parser_init(parser_classes, &logs_parser_def);
     pctp_data->add_parser = parser_init(parser_no_classes(), &add_parser_def);
     // pctp_data->config_parser = parser_init();
     pctp_data->exit_parser = parser_init(parser_no_classes(), &exit_parser_def);
@@ -196,6 +206,7 @@ int pctp_init(const int client_fd, fd_selector selector, server_config* config, 
     pctp_data->password_len = 0;
     pctp_data->new_username_len = 0;
     pctp_data->new_password_len = 0;
+    pctp_data->logs_n_len = 0;
     
     return 0;
 }
@@ -260,7 +271,7 @@ static unsigned login_user_read(struct selector_key *key) {
             write_msg_to_buffer(&pctp_data->write_buffer, ERR_INVALID_COMMAND_MSG);
             return LOGIN_USER_ERROR_WRITE;
         }
-        if (e->type == TYPE_INPUT && pctp_data->username_len < MAX_DATA_SIZE) {
+        if (e->type == TYPE_INPUT && pctp_data->username_len < MAX_CREDENTIAL_SIZE) {
             pctp_data->username[pctp_data->username_len++] = c;
         }
     }
@@ -311,7 +322,7 @@ static unsigned login_pass_read(struct selector_key *key) {
             write_msg_to_buffer(&pctp_data->write_buffer, ERR_INVALID_COMMAND_MSG);
             return LOGIN_PASS_ERROR_WRITE;
         }
-        if (e->type == TYPE_INPUT && pctp_data->password_len < MAX_DATA_SIZE) {
+        if (e->type == TYPE_INPUT && pctp_data->password_len < MAX_CREDENTIAL_SIZE) {
             pctp_data->password[pctp_data->password_len++] = c;
         }
     }
@@ -344,16 +355,17 @@ static unsigned main_read(struct selector_key *key) {
     while (buffer_can_read(read_buffer)) {
         uint8_t c = buffer_read(read_buffer);
         const struct parser_event* stats_event = parser_feed(pctp_data->stats_parser, c);
+        const struct parser_event* logs_event = parser_feed(pctp_data->logs_parser, c);
         const struct parser_event* add_event = parser_feed(pctp_data->add_parser, c);
         const struct parser_event* exit_event = parser_feed(pctp_data->exit_parser, c);
         if (stats_event->type == TYPE_SUCCESS) {
-            printf("Main parser succeded\n");
-            printf("Command: stats\n");
+            LOG(LOG_DEBUG, "Main parser succeded\n");
+            LOG(LOG_DEBUG, "Command: stats\n");
             write_msg_to_buffer(&pctp_data->write_buffer, OK_STATS_MSG);
-            char current_connections[MAX_DATA_SIZE];
-            char total_connections[MAX_DATA_SIZE];
-            char current_bytes_proxied[MAX_DATA_SIZE];
-            char total_bytes_proxied[MAX_DATA_SIZE];
+            char current_connections[MAX_MSG_SIZE];
+            char total_connections[MAX_MSG_SIZE];
+            char current_bytes_proxied[MAX_MSG_SIZE];
+            char total_bytes_proxied[MAX_MSG_SIZE];
             sprintf(current_connections, CURRENT_CONNECTIONS_MSG, get_active_connection_count(pctp_data->stats));
             sprintf(total_connections, TOTAL_CONNECTIONS_MSG, get_total_connection_count(pctp_data->stats));
             sprintf(current_bytes_proxied, CURRENT_BYTES_PROXIED_MSG, get_current_connections_bytes_proxied(pctp_data->stats));
@@ -365,6 +377,26 @@ static unsigned main_read(struct selector_key *key) {
             write_msg_to_buffer(&pctp_data->write_buffer, total_bytes_proxied);
             write_msg_to_buffer(&pctp_data->write_buffer, EMPTY_MSG);
             return STATS_WRITE;
+        }
+        if (logs_event->type == TYPE_SUCCESS) {
+            LOG(LOG_DEBUG, "Main parser succeded\n");
+            LOG(LOG_DEBUG, "Command: logs\n");
+            write_msg_to_buffer(&pctp_data->write_buffer, OK_LOGS_MSG);
+            pctp_data->logs_n[pctp_data->logs_n_len] = 0;
+            int logs_to_send = 0;
+            sscanf(pctp_data->logs_n, "%d", &logs_to_send);
+            if (logs_to_send == 0) logs_to_send = DEFAULT_LOGS_TO_SEND;
+            logs_to_send = MIN(logs_to_send, MAX_LOGS_TO_SEND);
+            reset_server_connection_entry_iterator(pctp_data->stats);
+            while(has_next_server_connection_entry(pctp_data->stats) && logs_to_send-- > 0) {
+                server_connection_entry* entry = get_next_server_connection_entry(pctp_data->stats);
+                char log_entry[MAX_MSG_SIZE];
+                sprintf(log_entry, LOG_ENTRY_FORMAT, entry->user, entry->source_host, entry->source_port, entry->target_host, entry->target_port, entry->reply_code);
+                write_msg_to_buffer(&pctp_data->write_buffer, log_entry);
+                write_msg_to_buffer(&pctp_data->write_buffer, EMPTY_MSG);
+            }
+            write_msg_to_buffer(&pctp_data->write_buffer, EMPTY_MSG);
+            return LOGS_WRITE;
         }
         if (add_event->type == TYPE_BASIC) {
             LOG(LOG_DEBUG, "Main parser succeded");
@@ -386,11 +418,13 @@ static unsigned main_read(struct selector_key *key) {
             write_msg_to_buffer(&pctp_data->write_buffer, OK_DONE_MSG);
             return EXIT_WRITE;
         }
-        if (stats_event->type == TYPE_ERROR && add_event->type == TYPE_ERROR && exit_event->type == TYPE_ERROR) {
+        if (stats_event->type == TYPE_ERROR && logs_event->type == TYPE_ERROR && add_event->type == TYPE_ERROR && exit_event->type == TYPE_ERROR) {
             LOG(LOG_DEBUG, "Main parsers failed");
-            printf("Main parsers failed\n");
             write_msg_to_buffer(&pctp_data->write_buffer, ERR_INVALID_COMMAND_MSG);
             return MAIN_ERROR_WRITE;
+        }
+        if (logs_event->type == TYPE_INPUT && pctp_data->logs_n_len < MAX_LOGS_DIGITS) {
+            pctp_data->logs_n[pctp_data->logs_n_len++] = c;
         }
     }
 
@@ -400,8 +434,15 @@ static unsigned main_read(struct selector_key *key) {
 static void reset_main_state(const unsigned state, struct selector_key *key) {
     pctp* pctp_data = key->data;
     parser_reset(pctp_data->stats_parser);
+    reset_logs_state(state, key);
     reset_add_state(state, key);
     parser_reset(pctp_data->exit_parser);
+}
+
+static void reset_logs_state(const unsigned state, struct selector_key *key) {
+    pctp* pctp_data = key->data;
+    parser_reset(pctp_data->logs_parser);
+    pctp_data->logs_n_len = 0;
 }
 
 static void reset_add_state(const unsigned state, struct selector_key *key) {
@@ -574,6 +615,19 @@ static unsigned stats_write(struct selector_key *key) {
     return ERROR;
 }
 
+static unsigned logs_write(struct selector_key *key) {
+    pctp *pctp_data = key->data;
+    buffer *write_buffer = &pctp_data->write_buffer;
+    int fd = pctp_data->client_fd;
+    int res = send_buffer_msg(fd, write_buffer);
+    switch (res) {
+        case MSG_SENT: return MAIN_READ;
+        case MSG_SEND_BLOCKED: return LOGS_WRITE;
+        case MSG_SEND_ERROR: return ERROR;
+    }
+    return ERROR;
+}
+
 static unsigned add_write(struct selector_key *key) {
     pctp *pctp_data = key->data;
     buffer *write_buffer = &pctp_data->write_buffer;
@@ -624,7 +678,7 @@ static unsigned add_user_read(struct selector_key *key) {
             write_msg_to_buffer(&pctp_data->write_buffer, ERR_INVALID_COMMAND_MSG);
             return ADD_USER_ERROR_WRITE;
         }
-        if (e->type == TYPE_INPUT && pctp_data->new_username_len < MAX_DATA_SIZE) {
+        if (e->type == TYPE_INPUT && pctp_data->new_username_len < MAX_CREDENTIAL_SIZE) {
             pctp_data->new_username[pctp_data->new_username_len++] = c;
         }
     }
@@ -725,7 +779,7 @@ static unsigned add_pass_read(struct selector_key *key) {
             write_msg_to_buffer(&pctp_data->write_buffer, ERR_INVALID_COMMAND_MSG);
             return ADD_PASS_ERROR_WRITE;
         }
-        if (e->type == TYPE_INPUT && pctp_data->new_password_len < MAX_DATA_SIZE) {
+        if (e->type == TYPE_INPUT && pctp_data->new_password_len < MAX_CREDENTIAL_SIZE) {
             pctp_data->new_password[pctp_data->new_password_len++] = c;
         }
     }

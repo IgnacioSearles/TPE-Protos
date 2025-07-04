@@ -11,11 +11,15 @@
 #include "server_config.h"
 #include "server_stats.h"
 
-#define MAX_DATA_SIZE 256
 #define INITIAL_BUFFER_SIZE 4096
+#define MAX_CREDENTIAL_SIZE 24
+#define MAX_MSG_SIZE 1024
+#define MAX_LOGS_DIGITS 12
+#define MAX_LOGS_TO_SEND 100
+#define DEFAULT_LOGS_TO_SEND 10
 
-#define DEFAULT_ADMIN_USER "postgres"
-#define DEFAULT_ADMIN_PASS "postgres"
+#define DEFAULT_ADMIN_USER "username"
+#define DEFAULT_ADMIN_PASS "password"
 
 typedef struct pctp {
     server_config* config;
@@ -36,6 +40,7 @@ typedef struct pctp {
     struct parser *user_parser;
     struct parser *pass_parser;
     struct parser *stats_parser;
+    struct parser *logs_parser;
     struct parser *add_parser;
     // struct parser *config_parser;
     struct parser *exit_parser;
@@ -43,17 +48,19 @@ typedef struct pctp {
     int id;
 
     // Datos parseados
-    char username[MAX_DATA_SIZE];
+    char username[MAX_CREDENTIAL_SIZE];
     int username_len;
-    char password[MAX_DATA_SIZE];
+    char password[MAX_CREDENTIAL_SIZE];
     int password_len;
 
-    char new_username[MAX_DATA_SIZE];
+    char new_username[MAX_CREDENTIAL_SIZE];
     int new_username_len;
-    char new_password[MAX_DATA_SIZE];
+    char new_password[MAX_CREDENTIAL_SIZE];
     int new_password_len;
     int level;
 
+    char logs_n[MAX_LOGS_DIGITS+1];
+    int logs_n_len;
 } pctp;
 
 int pctp_init(const int client_fd, fd_selector s, server_config* config, server_stats stats);

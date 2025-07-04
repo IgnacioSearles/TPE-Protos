@@ -3,6 +3,7 @@
 #include "../shared/parser.h"
 
 #define CLASS_ALNUM (1 << 8)
+#define CLASS_NUM (1 << 10)
 
 enum type { TYPE_UNDEFINED, TYPE_SUCCESS, TYPE_ERROR, TYPE_INPUT, TYPE_BASIC, TYPE_ADMIN };
 
@@ -228,6 +229,75 @@ static const struct parser_definition stats_parser_def = {
     .states = stats_parser_state_transitions,
     .states_n = stats_parser_states_n,
     .start_state = ST_STATS_S1
+};
+
+enum logs_parser_states { ST_LOGS_L, ST_LOGS_O, ST_LOGS_G, ST_LOGS_S, ST_LOGS_SPACE, ST_LOGS_INPUT, ST_LOGS_NL, ST_LOGS_DONE, ST_LOGS_ERROR};
+
+static const struct parser_state_transition logs_parser_state_L_transitions[] = {
+    { .when = 'L', .dest = ST_LOGS_O, .act1 = ignore }, 
+    { .when = ANY, .dest = ST_LOGS_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition logs_parser_state_O_transitions[] = {
+    { .when = 'O', .dest = ST_LOGS_G, .act1 = ignore }, 
+    { .when = ANY, .dest = ST_LOGS_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition logs_parser_state_G_transitions[] = {
+    { .when = 'G', .dest = ST_LOGS_S, .act1 = ignore }, 
+    { .when = ANY, .dest = ST_LOGS_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition logs_parser_state_S_transitions[] = {
+    { .when = 'S', .dest = ST_LOGS_SPACE, .act1 = ignore }, 
+    { .when = ANY, .dest = ST_LOGS_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition logs_parser_state_SPACE_transitions[] = {
+    { .when = ' ', .dest = ST_LOGS_INPUT, .act1 = ignore }, 
+    { .when = '\r', .dest = ST_LOGS_NL, .act1 = ignore }, 
+    { .when = '\n', .dest = ST_USER_DONE, .act1 = set_type_success }, 
+    { .when = ANY, .dest = ST_LOGS_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition logs_parser_state_INPUT_transitions[] = {
+    { .when = '\r', .dest = ST_LOGS_NL, .act1 = ignore }, 
+    { .when = '\n', .dest = ST_USER_DONE, .act1 = set_type_success }, 
+    { .when = CLASS_NUM, .dest = ST_LOGS_INPUT, .act1 = set_type_input },
+    { .when = ANY, .dest = ST_LOGS_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition logs_parser_state_NL_transitions[] = {
+    { .when = '\n', .dest = ST_LOGS_DONE, .act1 = set_type_success }, 
+    { .when = ANY, .dest = ST_LOGS_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition logs_parser_state_DONE_transitions[] = {0};
+
+static const struct parser_state_transition logs_parser_state_ERROR_transitions[] = {
+    { .when = '\n', .dest = ST_LOGS_ERROR, .act1 = set_type_error }, 
+    { .when = ANY, .dest = ST_LOGS_ERROR, .act1 = ignore }
+};
+
+static const size_t logs_parser_states_n[] = {2, 2, 2, 2, 4, 4, 2, 0, 2};
+
+static const struct parser_state_transition* logs_parser_state_transitions[] = {
+    logs_parser_state_L_transitions,
+    logs_parser_state_O_transitions,
+    logs_parser_state_G_transitions,
+    logs_parser_state_S_transitions,
+    logs_parser_state_SPACE_transitions,
+    logs_parser_state_INPUT_transitions,
+    logs_parser_state_NL_transitions,
+    logs_parser_state_DONE_transitions,
+    logs_parser_state_ERROR_transitions,
+};
+
+static const struct parser_definition logs_parser_def = {
+    .states_count = ST_LOGS_ERROR,
+    .states = logs_parser_state_transitions,
+    .states_n = logs_parser_states_n,
+    .start_state = ST_LOGS_L
 };
 
 enum add_parser_states { ST_ADD_A1, ST_ADD_D1, ST_ADD_D2, ST_ADD_SPACE, 

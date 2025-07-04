@@ -8,6 +8,8 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 socks5_state request_read(struct selector_key *key) {
     struct socks5* data = ATTACHMENT(key);
@@ -33,6 +35,9 @@ socks5_state request_read(struct selector_key *key) {
                 buffer_read_adv(&data->read_buffer, result.total_size);
                 strcpy(data->target_host, result.target_host);
                 data->target_port = result.target_port;
+                data->target_atyp = result.atyp;
+            
+                LOG_A(LOG_DEBUG, "REQUEST_READ: Attempting connection to %s:%d (ATYP=%d)", data->target_host, data->target_port, data->target_atyp);
             
                 char port_str[6];
                 snprintf(port_str, sizeof(port_str), "%d", data->target_port);
@@ -100,14 +105,61 @@ socks5_state request_write(struct selector_key *key) {
 
     LOG_A(LOG_DEBUG, "REQUEST_WRITE: Sending response (code=%d)", data->reply_code);
 
-    socks5_response response = create_socks5_response(data->reply_code);
+    socks5_response response;
+    
+    if (data->reply_code == SOCKS5_REP_SUCCESS && data->origin_fd >= 0) {
+        struct sockaddr_storage local_addr;
+        socklen_t addr_len = sizeof(local_addr);
+        
+        if (getsockname(data->origin_fd, (struct sockaddr*)&local_addr, &addr_len) == 0) {
+            if (local_addr.ss_family == AF_INET) {
+                struct sockaddr_in* ipv4 = (struct sockaddr_in*)&local_addr;
+                response = create_socks5_response_with_addr(data->reply_code, SOCKS5_ATYP_IPV4, &ipv4->sin_addr, ntohs(ipv4->sin_port));
+            } else if (local_addr.ss_family == AF_INET6) {
+                struct sockaddr_in6* ipv6 = (struct sockaddr_in6*)&local_addr;
+                response = create_socks5_response_with_addr(data->reply_code, SOCKS5_ATYP_IPV6, &ipv6->sin6_addr, ntohs(ipv6->sin6_port));
+            } else {
+                response = create_socks5_response(data->reply_code);
+            }
+        } else {
+            response = create_socks5_response(data->reply_code);
+        }
+    } else {
+        response = create_socks5_response(data->reply_code);
+    }
+    
+    size_t response_size = SOCKS5_RESPONSE_HEADER_SIZE;
+    if (response.atyp == SOCKS5_ATYP_IPV4) {
+        response_size += SOCKS5_IPV4_ADDR_SIZE + SOCKS5_PORT_SIZE;
+    } else if (response.atyp == SOCKS5_ATYP_IPV6) {
+        response_size += SOCKS5_IPV6_ADDR_SIZE + SOCKS5_PORT_SIZE;
+    } else {
+        response_size += SOCKS5_IPV4_ADDR_SIZE + SOCKS5_PORT_SIZE;
+    }
     
     size_t count;
     uint8_t* ptr = buffer_write_ptr(&data->write_buffer, &count);
 
-    if (count >= sizeof(response)) {
-        memcpy(ptr, &response, sizeof(response));
-        buffer_write_adv(&data->write_buffer, sizeof(response));
+    if (count >= response_size) {
+        uint8_t* buf = ptr;
+        
+        buf[0] = response.version;  // VER
+        buf[1] = response.rep;      // REP  
+        buf[2] = response.rsv;      // RSV
+        buf[3] = response.atyp;     // ATYP
+        
+        if (response.atyp == SOCKS5_ATYP_IPV4) {
+            memcpy(&buf[SOCKS5_RESPONSE_HEADER_SIZE], response.addr.ipv4, SOCKS5_IPV4_ADDR_SIZE);
+            memcpy(&buf[SOCKS5_RESPONSE_HEADER_SIZE + SOCKS5_IPV4_ADDR_SIZE], &response.port, SOCKS5_PORT_SIZE);
+        } else if (response.atyp == SOCKS5_ATYP_IPV6) {
+            memcpy(&buf[SOCKS5_RESPONSE_HEADER_SIZE], response.addr.ipv6, SOCKS5_IPV6_ADDR_SIZE);
+            memcpy(&buf[SOCKS5_RESPONSE_HEADER_SIZE + SOCKS5_IPV6_ADDR_SIZE], &response.port, SOCKS5_PORT_SIZE);
+        } else {
+            memset(&buf[SOCKS5_RESPONSE_HEADER_SIZE], 0, SOCKS5_IPV4_ADDR_SIZE);
+            memcpy(&buf[SOCKS5_RESPONSE_HEADER_SIZE + SOCKS5_IPV4_ADDR_SIZE], &response.port, SOCKS5_PORT_SIZE);
+        }
+        
+        buffer_write_adv(&data->write_buffer, response_size);
         
         ptr = buffer_read_ptr(&data->write_buffer, &count);
         ssize_t n = send(key->fd, ptr, count, MSG_NOSIGNAL | MSG_DONTWAIT);

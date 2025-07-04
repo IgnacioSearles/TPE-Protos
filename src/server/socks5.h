@@ -55,6 +55,7 @@ typedef struct socks5 {
     
     char target_host[MAX_DATA_SIZE];
     uint16_t target_port;
+    uint8_t target_atyp;
     uint8_t reply_code;
     
 } socks5;

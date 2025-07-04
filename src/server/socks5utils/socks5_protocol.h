@@ -40,20 +40,20 @@
 #define AUTH_SUCCESS    0x00
 #define AUTH_FAILURE    0x01
 
+// Tamaños de protocolo SOCKS5
 #define SOCKS5_HELLO_MIN_SIZE    3    // VER + NMETHODS + al menos 1 método
 #define SOCKS5_AUTH_MIN_SIZE     5    // VER + ULEN + usuario(min 1) + PLEN + password(min 1)  
 #define SOCKS5_REQUEST_MIN_SIZE  6    // VER + CMD + RSV + ATYP + mínimo addr + puerto
-#define SOCKS5_REP_FAILURE      0x01
-#define SOCKS5_REP_NOT_ALLOWED  0x02
-#define SOCKS5_REP_NET_UNREACH  0x03
-#define SOCKS5_REP_HOST_UNREACH 0x04
-#define SOCKS5_REP_REFUSED      0x05
-#define SOCKS5_REP_TTL_EXPIRED  0x06
-#define SOCKS5_REP_CMD_NOT_SUP  0x07
-#define SOCKS5_REP_ATYP_NOT_SUP 0x08
 
-#define AUTH_SUCCESS            0x00
-#define AUTH_FAILURE            0x01
+// Tamaños específicos para IPv6
+#define SOCKS5_IPV4_ADDR_SIZE    4 
+#define SOCKS5_IPV6_ADDR_SIZE    16
+#define SOCKS5_PORT_SIZE         2
+#define SOCKS5_RESPONSE_HEADER_SIZE  4    // VER + REP + RSV + ATYP
+
+// Tamaños de respuesta según tipo de dirección
+#define SOCKS5_RESPONSE_IPV4_SIZE    (SOCKS5_RESPONSE_HEADER_SIZE + SOCKS5_IPV4_ADDR_SIZE + SOCKS5_PORT_SIZE)
+#define SOCKS5_RESPONSE_IPV6_SIZE    (SOCKS5_RESPONSE_HEADER_SIZE + SOCKS5_IPV6_ADDR_SIZE + SOCKS5_PORT_SIZE)
 
 #define MAX_REQUEST_SIZE 262 // Tamaño máximo de un request según RFC 1928
 
@@ -80,7 +80,10 @@ typedef struct {
     uint8_t rep;
     uint8_t rsv;
     uint8_t atyp;
-    uint8_t addr[4];  // Para IPv4
+    union {
+        uint8_t ipv4[4];
+        uint8_t ipv6[16];
+    } addr;
     uint16_t port;
 } socks5_response;
 
@@ -100,6 +103,9 @@ typedef struct {
 socks5_hello_response create_hello_response(uint8_t method);
 auth_response create_auth_response(uint8_t status);
 socks5_response create_socks5_response(uint8_t rep);
+socks5_response create_socks5_response_with_addr(uint8_t rep, uint8_t atyp, const void* addr, uint16_t port);
+size_t get_socks5_response_size(uint8_t atyp);
+int get_socket_local_address(int sockfd, uint8_t* atyp, void* addr, uint16_t* port);
 
 typedef struct {
     bool valid;

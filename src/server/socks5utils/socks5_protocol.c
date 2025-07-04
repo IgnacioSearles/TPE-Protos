@@ -2,6 +2,9 @@
 #include <server_config.h>
 #include <string.h>
 #include <stdio.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
 
 socks5_hello_response create_hello_response(uint8_t method) {
     socks5_hello_response response;
@@ -23,11 +26,27 @@ socks5_response create_socks5_response(uint8_t rep) {
     response.rep = rep;
     response.rsv = 0x00;
     response.atyp = SOCKS5_ATYP_IPV4;
-    response.addr[0] = 0;
-    response.addr[1] = 0;
-    response.addr[2] = 0;
-    response.addr[3] = 0;
+    memset(&response.addr, 0, sizeof(response.addr));
     response.port = 0;
+    return response;
+}
+
+socks5_response create_socks5_response_with_addr(uint8_t rep, uint8_t atyp, const void* addr, uint16_t port) {
+    socks5_response response;
+    response.version = SOCKS5_VERSION;
+    response.rep = rep;
+    response.rsv = 0x00;
+    response.atyp = atyp;
+    response.port = htons(port);
+    
+    if (atyp == SOCKS5_ATYP_IPV4 && addr) {
+        memcpy(response.addr.ipv4, addr, SOCKS5_IPV4_ADDR_SIZE);
+    } else if (atyp == SOCKS5_ATYP_IPV6 && addr) {
+        memcpy(response.addr.ipv6, addr, SOCKS5_IPV6_ADDR_SIZE);
+    } else {
+        memset(&response.addr, 0, sizeof(response.addr));
+    }
+    
     return response;
 }
 
@@ -148,8 +167,23 @@ socks5_request_parser_result parse_socks5_request(uint8_t* data, size_t data_len
         memcpy(result.target_host, &data[5], domain_len);
         result.target_host[domain_len] = '\0';
         
+    } else if (result.atyp == SOCKS5_ATYP_IPV6) {
+        addr_len = SOCKS5_IPV6_ADDR_SIZE;
+        result.total_size = SOCKS5_RESPONSE_HEADER_SIZE + SOCKS5_IPV6_ADDR_SIZE + SOCKS5_PORT_SIZE;
+        
+        if (data_len < result.total_size) {
+            return result;
+        }
+        
+        char ipv6_str[INET6_ADDRSTRLEN];
+        if (inet_ntop(AF_INET6, &data[SOCKS5_RESPONSE_HEADER_SIZE], ipv6_str, INET6_ADDRSTRLEN) != NULL) {
+            snprintf(result.target_host, sizeof(result.target_host), "%s", ipv6_str);
+        } else {
+            return result;
+        }
+        
     } else {
-        return result; // ? ATYP no soportado
+        return result;
     }
     
     size_t port_offset = addr_start + addr_len;
@@ -157,4 +191,40 @@ socks5_request_parser_result parse_socks5_request(uint8_t* data, size_t data_len
     
     result.valid = true;
     return result;
+}
+
+size_t get_socks5_response_size(uint8_t atyp) {
+    switch (atyp) {
+        case SOCKS5_ATYP_IPV4:
+            return SOCKS5_RESPONSE_IPV4_SIZE;
+        case SOCKS5_ATYP_IPV6:
+            return SOCKS5_RESPONSE_IPV6_SIZE;
+        default:
+            return SOCKS5_RESPONSE_IPV4_SIZE;
+    }
+}
+
+int get_socket_local_address(int sockfd, uint8_t* atyp, void* addr, uint16_t* port) {
+    struct sockaddr_storage ss;
+    socklen_t len = sizeof(ss);
+    
+    if (getsockname(sockfd, (struct sockaddr*)&ss, &len) != 0) {
+        return -1;
+    }
+    
+    if (ss.ss_family == AF_INET) {
+        struct sockaddr_in* sin = (struct sockaddr_in*)&ss;
+        *atyp = SOCKS5_ATYP_IPV4;
+        memcpy(addr, &sin->sin_addr, SOCKS5_IPV4_ADDR_SIZE);
+        *port = ntohs(sin->sin_port);
+        return 0;
+    } else if (ss.ss_family == AF_INET6) {
+        struct sockaddr_in6* sin6 = (struct sockaddr_in6*)&ss;
+        *atyp = SOCKS5_ATYP_IPV6;
+        memcpy(addr, &sin6->sin6_addr, SOCKS5_IPV6_ADDR_SIZE);
+        *port = ntohs(sin6->sin6_port);
+        return 0;
+    }
+    
+    return -1;
 }

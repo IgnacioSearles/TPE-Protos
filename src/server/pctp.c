@@ -29,7 +29,7 @@
 #define TOTAL_CONNECTIONS_MSG "total_connections: %ld\n"
 #define CURRENT_BYTES_PROXIED_MSG "current_bytes_proxied: %ld\n"
 #define TOTAL_BYTES_PROXIED_MSG "total_bytes_proxied: %ld\n"
-#define LOG_ENTRY_MSG "%s\tA\t%s\t%d\t%s\t%d\t%d\t%ld\t%s\t%s"
+#define LOG_ENTRY_MSG "%d-%02d-%02dT%02d:%02d:%02dZ\t%s\tA\t%s\t%d\t%s\t%d\t%d\t%ld\t%s\n"
 #define EMPTY_MSG "\n"
 
 #define ERR_INVALID_USER_MSG "-ERR Invalid username\n"
@@ -357,8 +357,10 @@ static void write_n_logs_to_buffer(buffer* write_buffer, server_stats stats, int
     while(has_next_server_connection_entry(stats) && logs_to_send-- > 0) {
         server_connection_entry* entry = get_next_server_connection_entry(stats);
         char log_entry[MAX_MSG_SIZE];
-        sprintf(log_entry, LOG_ENTRY_MSG, entry->user, entry->source_host, entry->source_port, entry->target_host, entry->target_port,
-                entry->reply_code, entry->bytes_proxied, entry->auth_success == AUTHENTICATED ? "Auth" : "No auth", ctime(&entry->timestamp));
+        struct tm *t = localtime(&entry->timestamp);
+        sprintf(log_entry, LOG_ENTRY_MSG, t->tm_year + TM_YEAR_RELATIVE, t->tm_mon + TM_MONTH_RELATIVE, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec,
+                entry->user, entry->source_host, entry->source_port, entry->target_host, entry->target_port,
+                entry->reply_code, entry->bytes_proxied, entry->auth_success == AUTHENTICATED ? "Auth" : "No auth");
         write_msg_to_buffer(write_buffer, log_entry);
     }
     write_msg_to_buffer(write_buffer, EMPTY_MSG);

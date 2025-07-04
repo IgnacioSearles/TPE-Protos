@@ -4,6 +4,9 @@
 #define LOG(level, fmt) logger_log(level, __FILE__, fmt)
 #define LOG_A(level, fmt, ...) logger_log(level, __FILE__, fmt, __VA_ARGS__)
 
+#define TM_YEAR_RELATIVE 1900
+#define TM_MONTH_RELATIVE 1
+
 typedef enum {
     LOG_DEBUG = 0,
     LOG_INFO  = 1,

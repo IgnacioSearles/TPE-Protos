@@ -6,9 +6,6 @@
 
 static logging_level min_level = LOG_INFO;
 
-#define TM_YEAR_RELATIVE 1900
-#define TM_MONTH_RELATIVE 1
-
 typedef struct {
     const char *name;
     int level;

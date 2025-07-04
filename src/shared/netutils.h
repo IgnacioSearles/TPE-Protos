@@ -52,6 +52,12 @@ int get_socket_peer_address(int fd, struct sockaddr_storage *out_addr);
 const char *sockaddr_to_human(char *buff, const size_t buffsize,
                               const struct sockaddr *addr);
 
+
+/*
+ *  Gets the port of the socket
+ * */
+uint16_t get_socket_port(const struct sockaddr* addr);
+
 /**
  * Escribe n bytes de buff en fd de forma bloqueante
  *

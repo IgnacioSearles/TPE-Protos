@@ -90,7 +90,7 @@ int socks5_init(const int client_fd, fd_selector s, server_config* config, serve
     }
 
     log_connection_open(stats, client_fd);
-    LOG_A(LOG_INFO, "SOCKS5: Connection initialized successfully (fd=%d)", client_fd);
+    LOG_A(LOG_DEBUG, "SOCKS5: Connection initialized successfully (fd=%d)", client_fd);
 
     return 0;
 }
@@ -160,7 +160,8 @@ static void socks5_close(struct selector_key *key) {
     }
     
     LOG_A(LOG_DEBUG, "SOCKS5: Cleaning up connection (client_fd=%d, origin_fd=%d)", socks->client_fd, socks->origin_fd);
-    log_connection_close(socks->stats, socks->client_fd);
+    LOG_A(LOG_DEBUG, "SOCKS5: Exit status %d", socks->reply_code);
+    log_connection_close(socks->stats, socks->client_fd, socks->reply_code);
 
     if (socks->origin_fd >= 0) {
         LOG_A(LOG_DEBUG, "SOCKS5: Unregistering origin_fd=%d from selector", socks->origin_fd);

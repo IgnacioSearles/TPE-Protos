@@ -2,6 +2,7 @@
 #include <netinet/in.h>
 #include <stdbool.h>
 #include <netdb.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <fcntl.h>
@@ -19,6 +20,17 @@
 #include "netutils.h"
 
 #define N(x) (sizeof(x) / sizeof((x)[0]))
+
+uint16_t get_socket_port(const struct sockaddr *addr) {
+    switch (addr->sa_family) {
+    case AF_INET:
+        return ntohs(((struct sockaddr_in *)addr)->sin_port);
+    case AF_INET6:
+        return ntohs(((struct sockaddr_in6 *)addr)->sin6_port);
+    }
+
+    return 0;
+}
 
 extern const char *sockaddr_to_human(char *buff, const size_t buffsize,
                                      const struct sockaddr *addr) {
@@ -51,7 +63,8 @@ extern const char *sockaddr_to_human(char *buff, const size_t buffsize,
         strncpy(buff, "unknown", buffsize);
     }
 
-    strncat(buff, ":", buffsize);
+    if (handled) strncat(buff, ":", buffsize);
+
     buff[buffsize - 1] = 0;
     const size_t len = strlen(buff);
 

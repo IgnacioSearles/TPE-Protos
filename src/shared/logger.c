@@ -6,6 +6,9 @@
 
 static logging_level min_level = LOG_INFO;
 
+#define TM_YEAR_RELATIVE 1900
+#define TM_MONTH_RELATIVE 1
+
 typedef struct {
     const char *name;
     int level;
@@ -64,7 +67,7 @@ void logger_log(logging_level level, const char* file, const char *fmt, ...) {
     time_t now = time(NULL);
     struct tm *t = localtime(&now);
 
-    fprintf(out, "[%02d:%02d:%02d] [%s] [%s] ", t->tm_hour, t->tm_min, t->tm_sec, get_filename(file), get_logging_level_name(level));
+    fprintf(out, "[%d-%02d-%02dT%02d:%02d:%02dZ] [%s] [%s] ", t->tm_year + TM_YEAR_RELATIVE, t->tm_mon + TM_MONTH_RELATIVE, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, get_filename(file), get_logging_level_name(level));
 
     va_list args;
     va_start(args, fmt);

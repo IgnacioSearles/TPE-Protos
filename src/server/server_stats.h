@@ -5,6 +5,8 @@
 #include <sys/socket.h>
 #include <time.h>
 
+#define MAX_HOST_LEN 100
+
 typedef struct server_stats_cdt* server_stats;
 
 typedef enum {
@@ -16,14 +18,20 @@ typedef enum {
 typedef struct {
     int is_connection_active;
 
-    struct sockaddr_storage client_addr;
+    char source_host[MAX_HOST_LEN];
+    uint16_t source_port;
+
     auth_state auth_success;
     
-    struct sockaddr_storage dest_addr;
+    char target_host[MAX_HOST_LEN];
+    uint16_t target_port;
+    
     const char* user;
 
     uint64_t bytes_proxied;
     time_t timestamp;
+
+    uint8_t reply_code;
 } server_connection_entry;
 
 /*
@@ -48,7 +56,7 @@ void log_user_authenticated(server_stats stats, int client_fd, const char* user)
 /*
  *  Loggea que un usuario se conecto a un servidor de destino (se hizo el proxy)
  * */
-void log_client_connected_to_destination_server(server_stats stats, int client_fd, int destination_fd);
+void log_client_connected_to_destination_server(server_stats stats, int client_fd, const char* target_host, uint16_t target_port);
 
 /*
  *  Loggea que se hizo proxy de cierta cantidad de bytes para un usuario particular
@@ -58,7 +66,7 @@ void log_bytes_proxied(server_stats stats, int client_fd, uint64_t bytes);
 /*
  *  Loggea que se cerro una conexion
  * */
-void log_connection_close(server_stats stats, int client_fd);
+void log_connection_close(server_stats stats, int client_fd, uint8_t reply_code);
 
 /*
  *  Restea el iterador de los logs

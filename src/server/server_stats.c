@@ -1,9 +1,10 @@
 #include "server_stats.h"
 #include "../shared/netutils.h"
+#include <logger.h>
 #include <fcntl.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/socket.h>
 #include <time.h>
 
@@ -35,7 +36,7 @@ server_stats create_server_stats() {
     return stats;
 }
 
-server_connection_log_entry* find_log_entry_by_fd(server_stats stats, int client_fd) {
+static server_connection_log_entry* find_log_entry_by_fd(server_stats stats, int client_fd) {
     for (int64_t i = stats->log_index - 1; i >= 0; i--) {
         if (stats->log[i].fd == client_fd)
             return &(stats->log[i]);
@@ -51,13 +52,23 @@ server_connection_log_entry* find_log_entry_by_fd(server_stats stats, int client
     return NULL;
 }
 
+static void print_log_entry(server_connection_entry* entry) {
+    LOG_A(LOG_INFO, "%s\tA\t%s\t%d\t%s\t%d\t%d", entry->user, entry->source_host, entry->source_port, entry->target_host, entry->target_port, entry->reply_code); 
+}
+
 void log_connection_open(server_stats stats, int client_fd) {
     stats->total_connection_count++;
     stats->active_connection_count++;
 
     server_connection_log_entry* log = &(stats->log[stats->log_index]);
 
-    get_socket_peer_address(client_fd, &(log->entry.client_addr));
+    struct sockaddr_storage client_addr;
+    get_socket_peer_address(client_fd, &(client_addr));
+    sockaddr_to_human(log->entry.source_host, MAX_HOST_LEN, (struct sockaddr*)&client_addr);
+    char* colon = strchr(log->entry.source_host, ':');
+    if (colon != NULL) *colon = '\0';
+    log->entry.source_port = get_socket_port((struct sockaddr*)&client_addr);
+
     log->entry.auth_success = AWAITING_AUTHENTICATION;
     log->entry.timestamp = time(NULL);
     log->entry.is_connection_active = 1;
@@ -76,12 +87,13 @@ void log_user_authenticated(server_stats stats, int client_fd, const char *user)
     log->entry.user = user;
 }
 
-void log_client_connected_to_destination_server(server_stats stats, int client_fd, int destination_fd) {
+void log_client_connected_to_destination_server(server_stats stats, int client_fd, const char* target_host, uint16_t target_port) {
     server_connection_log_entry* log = find_log_entry_by_fd(stats, client_fd);
     if (log == NULL)
         return;
 
-    get_socket_peer_address(destination_fd, &(log->entry.dest_addr));
+    log->entry.target_port = target_port;
+    strncpy(log->entry.target_host, target_host, MAX_HOST_LEN); // the struct is allocated with calloc so no need to null terminate just in case
 }
 
 void log_bytes_proxied(server_stats stats, int client_fd, uint64_t bytes) {
@@ -94,7 +106,7 @@ void log_bytes_proxied(server_stats stats, int client_fd, uint64_t bytes) {
     log->entry.bytes_proxied += bytes;
 }
 
-void log_connection_close(server_stats stats, int client_fd) {
+void log_connection_close(server_stats stats, int client_fd, uint8_t reply_code) {
     server_connection_log_entry* log = find_log_entry_by_fd(stats, client_fd);
     if (log == NULL)
         return;
@@ -105,6 +117,9 @@ void log_connection_close(server_stats stats, int client_fd) {
     log->fd = CLOSED_FD_STATE;
     log->entry.auth_success = (log->entry.auth_success != AUTHENTICATED) ? NEVER_AUTHENTICATED : AUTHENTICATED;
     log->entry.is_connection_active = 0;
+    log->entry.reply_code = reply_code;
+
+    print_log_entry(&(log->entry));
 }
 
 uint64_t get_active_connection_count(server_stats stats) {

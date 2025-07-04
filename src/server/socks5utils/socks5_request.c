@@ -44,7 +44,7 @@ socks5_state request_read(struct selector_key *key) {
                 data->origin_fd = connect_to_host(data->target_host, port_str);
                 
                 if (data->origin_fd >= 0) {
-                    log_client_connected_to_destination_server(data->stats, data->client_fd, data->origin_fd);
+                    log_client_connected_to_destination_server(data->stats, data->client_fd, data->target_host, data->target_port);
                     LOG_A(LOG_DEBUG, "REQUEST_READ: Connection initiated to %s:%d (fd=%d)", data->target_host, data->target_port, data->origin_fd);
                     data->reply_code = SOCKS5_REP_SUCCESS;
                     return CONNECTING;

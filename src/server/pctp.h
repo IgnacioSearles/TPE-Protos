@@ -43,6 +43,7 @@ typedef struct pctp {
     struct parser *logs_parser;
     struct parser *add_parser;
     struct parser *del_parser;
+    struct parser *list_parser;
     // struct parser *config_parser;
     struct parser *exit_parser;
 

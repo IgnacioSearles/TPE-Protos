@@ -1,6 +1,14 @@
 #include "server_config.h"
 #include <stdlib.h>
 
+int count_admins(server_config* config) {
+    int count = 0;
+    for (int i=0; i<config->user_count; i++) {
+        if (config->users[i].role == ADMIN) count++;
+    }
+    return count;
+}
+
 int add_user(server_config* config, char* user, char* pass, user_role role) {
     if (config->user_count >= MAX_USERS)
         return -1;

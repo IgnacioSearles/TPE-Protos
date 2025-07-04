@@ -23,6 +23,7 @@
 #define OK_ADD_MSG "+OK Please provide new user credentials\n"
 #define OK_ADD_PASS_MSG "+OK Succesfully added user\n"
 #define OK_DEL_MSG "+OK Succesfully deleted user\n"
+#define OK_LIST_MSG "+OK Sending user list...\n"
 #define OK_DONE_MSG "+OK Done\n"
 
 #define CURRENT_CONNECTIONS_MSG "current_connections: %ld\n"
@@ -30,6 +31,7 @@
 #define CURRENT_BYTES_PROXIED_MSG "current_bytes_proxied: %ld\n"
 #define TOTAL_BYTES_PROXIED_MSG "total_bytes_proxied: %ld\n"
 #define LOG_ENTRY_MSG "%d-%02d-%02dT%02d:%02d:%02dZ\t%s\tA\t%s\t%d\t%s\t%d\t%d\t%ld\t%s\n"
+#define USER_ENTRY_MSG "%s\t%s\n"
 #define EMPTY_MSG "\n"
 
 #define ERR_INVALID_USER_MSG "-ERR Invalid username\n"
@@ -151,7 +153,7 @@ int pctp_init(const int client_fd, fd_selector selector, server_config* config, 
 
     pctp_data->config = config;
     pctp_data->stats = stats;
-    if (config->user_count == 0) {
+    if (admin_count(config) == 0) {
         add_user(config, DEFAULT_ADMIN_USER, DEFAULT_ADMIN_PASS, ADMIN);
     }
 
@@ -182,6 +184,7 @@ int pctp_init(const int client_fd, fd_selector selector, server_config* config, 
     pctp_data->logs_parser = parser_init(parser_classes, &logs_parser_def);
     pctp_data->add_parser = parser_init(parser_no_classes(), &add_parser_def);
     pctp_data->del_parser = parser_init(parser_classes, &del_parser_def);
+    pctp_data->list_parser = parser_init(parser_no_classes(), &list_parser_def);
     // pctp_data->config_parser = parser_init();
     pctp_data->exit_parser = parser_init(parser_no_classes(), &exit_parser_def);
 
@@ -366,6 +369,16 @@ static void write_n_logs_to_buffer(buffer* write_buffer, server_stats stats, int
     write_msg_to_buffer(write_buffer, EMPTY_MSG);
 }
 
+static void write_users_to_buffer(buffer* write_buffer, server_config* config) {
+    for (int i=0; i<config->user_count; i++) {
+        server_user user = config->users[i];
+        char user_entry[MAX_MSG_SIZE]; 
+        sprintf(user_entry, USER_ENTRY_MSG, user.user, user.role == ADMIN? "Admin" : "Basic");
+        write_msg_to_buffer(write_buffer, user_entry);
+    }
+    write_msg_to_buffer(write_buffer, EMPTY_MSG);
+}
+
 static unsigned main_read(struct selector_key *key) {
     pctp *pctp_data = key->data;
     buffer* read_buffer = &pctp_data->read_buffer;
@@ -387,6 +400,7 @@ static unsigned main_read(struct selector_key *key) {
         const struct parser_event* logs_event = parser_feed(pctp_data->logs_parser, c);
         const struct parser_event* add_event = parser_feed(pctp_data->add_parser, c);
         const struct parser_event* del_event = parser_feed(pctp_data->del_parser, c);
+        const struct parser_event* list_event = parser_feed(pctp_data->list_parser, c);
         const struct parser_event* exit_event = parser_feed(pctp_data->exit_parser, c);
         if (stats_event->type == TYPE_SUCCESS) {
             LOG(LOG_DEBUG, "Main parser succeded\n");
@@ -424,13 +438,21 @@ static unsigned main_read(struct selector_key *key) {
             else write_msg_to_buffer(&pctp_data->write_buffer, ERR_DEL_MSG);
             return MAIN_WRITE;
         }
+        if (list_event->type == TYPE_SUCCESS) {
+            LOG(LOG_DEBUG, "Main parser succeded");
+            LOG(LOG_DEBUG, "Command: list");
+            write_msg_to_buffer(&pctp_data->write_buffer, OK_LIST_MSG);
+            write_users_to_buffer(&pctp_data->write_buffer, pctp_data->config);
+            return MAIN_WRITE;
+        }
         if (exit_event->type == TYPE_SUCCESS) {
             LOG(LOG_DEBUG, "Main parser succeded");
             LOG(LOG_DEBUG, "Command: exit");
             write_msg_to_buffer(&pctp_data->write_buffer, OK_DONE_MSG);
             return EXIT_WRITE;
         }
-        if (stats_event->type == TYPE_ERROR && logs_event->type == TYPE_ERROR && add_event->type == TYPE_ERROR && del_event->type == TYPE_ERROR && exit_event->type == TYPE_ERROR) {
+        if (stats_event->type == TYPE_ERROR && logs_event->type == TYPE_ERROR && add_event->type == TYPE_ERROR
+            && del_event->type == TYPE_ERROR && list_event->type == TYPE_ERROR && exit_event->type == TYPE_ERROR) {
             LOG(LOG_DEBUG, "Main parsers failed");
             write_msg_to_buffer(&pctp_data->write_buffer, ERR_INVALID_COMMAND_MSG);
             return MAIN_WRITE;
@@ -452,6 +474,7 @@ static void reset_main_state(const unsigned state, struct selector_key *key) {
     reset_logs_state(state, key);
     reset_add_state(state, key);
     reset_del_state(state, key);
+    parser_reset(pctp_data->list_parser);
     parser_reset(pctp_data->exit_parser);
 }
 

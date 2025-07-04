@@ -532,6 +532,70 @@ static const struct parser_definition del_parser_def = {
     .start_state = ST_DEL_D
 };
 
+enum list_parser_states { ST_LIST_L, ST_LIST_I, ST_LIST_S, ST_LIST_T, ST_LIST_CR, ST_LIST_NL, ST_LIST_DONE, ST_LIST_ERROR};
+
+static const struct parser_state_transition list_parser_state_L_transitions[] = {
+    { .when = 'L', .dest = ST_LIST_I, .act1 = ignore }, 
+    { .when = '\n', .dest = ST_LIST_ERROR, .act1 = set_type_error },
+    { .when = ANY, .dest = ST_LIST_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition list_parser_state_I_transitions[] = {
+    { .when = 'I', .dest = ST_LIST_S, .act1 = ignore }, 
+    { .when = '\n', .dest = ST_LIST_ERROR, .act1 = set_type_error },
+    { .when = ANY, .dest = ST_LIST_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition list_parser_state_S_transitions[] = {
+    { .when = 'S', .dest = ST_LIST_T, .act1 = ignore }, 
+    { .when = '\n', .dest = ST_LIST_ERROR, .act1 = set_type_error },
+    { .when = ANY, .dest = ST_LIST_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition list_parser_state_T_transitions[] = {
+    { .when = 'T', .dest = ST_LIST_CR, .act1 = ignore }, 
+    { .when = '\n', .dest = ST_LIST_ERROR, .act1 = set_type_error },
+    { .when = ANY, .dest = ST_LIST_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition list_parser_state_CR_transitions[] = {
+    { .when = '\r', .dest = ST_LIST_NL, .act1 = ignore }, 
+    { .when = '\n', .dest = ST_LIST_DONE, .act1 = set_type_success }, 
+    { .when = ANY, .dest = ST_LIST_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition list_parser_state_NL_transitions[] = {
+    { .when = '\n', .dest = ST_LIST_DONE, .act1 = set_type_success }, 
+    { .when = ANY, .dest = ST_LIST_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition list_parser_state_DONE_transitions[] = {0};
+
+static const struct parser_state_transition list_parser_state_ERROR_transitions[] = {
+    { .when = '\n', .dest = ST_LIST_ERROR, .act1 = set_type_error }, 
+    { .when = ANY, .dest = ST_LIST_ERROR, .act1 = ignore }
+};
+
+static const size_t list_parser_states_n[] = {3, 3, 3, 3, 3, 2, 0, 2};
+
+static const struct parser_state_transition* list_parser_state_transitions[] = {
+    list_parser_state_L_transitions,
+    list_parser_state_I_transitions,
+    list_parser_state_S_transitions,
+    list_parser_state_T_transitions,
+    list_parser_state_CR_transitions,
+    list_parser_state_NL_transitions,
+    list_parser_state_DONE_transitions,
+    list_parser_state_ERROR_transitions,
+};
+
+static const struct parser_definition list_parser_def = {
+    .states_count = ST_LIST_ERROR,
+    .states = list_parser_state_transitions,
+    .states_n = list_parser_states_n,
+    .start_state = ST_LIST_L
+};
+
 enum exit_parser_states { ST_EXIT_E, ST_EXIT_X, ST_EXIT_I, ST_EXIT_T, ST_EXIT_CR, ST_EXIT_NL, ST_EXIT_DONE, ST_EXIT_ERROR};
 
 static const struct parser_state_transition exit_parser_state_E_transitions[] = {

@@ -8,6 +8,7 @@ login commands: (must be executed in that order)
     PASS [password]
 
 main commands: (may be executed once logged in)
+    STATS
     ADD ADMIN (followed by login commands with the new credentials)
     ADD BASIC (followed by login commands with the new credentials)
     EXIT

@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <sys/socket.h>
+#include <time.h>
 
 typedef struct server_stats_cdt* server_stats;
 
@@ -22,7 +23,7 @@ typedef struct {
     const char* user;
 
     uint64_t bytes_proxied;
-    uint64_t timestamp;
+    time_t timestamp;
 } server_connection_entry;
 
 /*

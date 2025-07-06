@@ -1,5 +1,6 @@
 #include "logger.h"
 #include <errno.h>
+#include <net/if.h>
 #include <netinet/in.h>
 #include <stdbool.h>
 #include <netdb.h>
@@ -132,11 +133,28 @@ static int get_ip_addr_family(const char* ip_str, uint16_t port, struct sockaddr
         addr4->sin_addr.s_addr = htonl(INADDR_ANY);
         *addr_len = sizeof(struct sockaddr_in);
     } else {
-        if (inet_pton(AF_INET6, ip_str, &ipv6_test) == 1) {
+        int ip_str_len = strlen(ip_str);
+        char ip_str_copy[ip_str_len + 1];
+        strncpy(ip_str_copy, ip_str, ip_str_len + 1);
+
+        char* percentage = strchr(ip_str_copy, '%');
+        
+        if (percentage != NULL) {
+            *percentage = '\0';
+        }
+
+        if (inet_pton(AF_INET6, ip_str_copy, &ipv6_test) == 1) {
             struct sockaddr_in6* addr6 = (struct sockaddr_in6*)addr;
             addr6->sin6_family = AF_INET6;
             addr6->sin6_port = htons(port);
             addr6->sin6_addr = ipv6_test;
+
+            if (percentage != NULL) {
+                unsigned int ifindex = if_nametoindex(percentage + 1);
+                if (ifindex == 0) return -1;
+                addr6->sin6_scope_id = ifindex;
+            }
+
             family = AF_INET6;
             *addr_len = sizeof(struct sockaddr_in6);
         } else {

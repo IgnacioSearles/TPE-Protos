@@ -1,3 +1,4 @@
+#include "logger.h"
 #include <errno.h>
 #include <netinet/in.h>
 #include <stdbool.h>
@@ -119,6 +120,38 @@ error:
     return ret;
 }
 
+static struct in6_addr ipv6_test;
+
+static int get_ip_addr_family(const char* ip_str, uint16_t port, struct sockaddr_storage* addr, socklen_t* addr_len) {
+    int family = AF_INET;
+
+    if (ip_str == NULL) {
+        struct sockaddr_in* addr4 = (struct sockaddr_in*)addr;
+        addr4->sin_family = AF_INET;
+        addr4->sin_port = htons(port);
+        addr4->sin_addr.s_addr = htonl(INADDR_ANY);
+        *addr_len = sizeof(struct sockaddr_in);
+    } else {
+        if (inet_pton(AF_INET6, ip_str, &ipv6_test) == 1) {
+            struct sockaddr_in6* addr6 = (struct sockaddr_in6*)addr;
+            addr6->sin6_family = AF_INET6;
+            addr6->sin6_port = htons(port);
+            addr6->sin6_addr = ipv6_test;
+            family = AF_INET6;
+            *addr_len = sizeof(struct sockaddr_in6);
+        } else {
+            struct sockaddr_in* addr4 = (struct sockaddr_in*)addr;
+            if (inet_pton(AF_INET, ip_str, &addr4->sin_addr) <= 0)
+                return -1;
+            addr4->sin_family = AF_INET;
+            addr4->sin_port = htons(port);
+            *addr_len = sizeof(struct sockaddr_in);
+        }
+    }
+
+    return family;
+}
+
 int set_non_blocking(int fd) {
     int flags = fcntl(fd, F_GETFL, 0);
     if (flags == -1) return -1;
@@ -126,37 +159,38 @@ int set_non_blocking(int fd) {
 }
 
 int create_passive_tcp_socket(const char* ip_str, uint16_t port, uint32_t max_connections) {
-    int passive_tcp_socket = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_storage addr;
+    socklen_t addr_len;
+    int addr_family;
+    if ((addr_family = get_ip_addr_family(ip_str, port, &addr, &addr_len)) < 0)  {
+        LOG(LOG_DEBUG, "Could not get the address for the IP address string");
+        return -1;
+    }
+
+    int passive_tcp_socket = socket(addr_family, SOCK_STREAM, 0);
     if (passive_tcp_socket < 0) {
+        LOG(LOG_DEBUG, "Could not create passive TCP socket");
         return -1;
     }
 
     if (set_non_blocking(passive_tcp_socket) < 0) {
+        LOG(LOG_DEBUG, "Could not set TCP socket as passive");
         close(passive_tcp_socket);
         return -1;
     }
     
+    // Don't allow dual mode if IPv6
     int opt = 1;
     setsockopt(passive_tcp_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
-    struct sockaddr_in addr = {
-        .sin_family = AF_INET,
-        .sin_port = htons(port),
-    };
-
-    if (ip_str == NULL) {
-        addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    } else if (inet_pton(AF_INET, ip_str, &addr.sin_addr) <= 0) {
-        close(passive_tcp_socket);
-        return -1;
-    }
-
-    if (bind(passive_tcp_socket, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+    if (bind(passive_tcp_socket, (struct sockaddr*)&addr, addr_len) < 0) {
+        LOG(LOG_DEBUG, "Could not bind TCP socket to address");
         close(passive_tcp_socket);
         return -1;
     }
 
     if (listen(passive_tcp_socket, max_connections) < 0) {
+        LOG(LOG_DEBUG, "Could not listen on TCP socket");
         close(passive_tcp_socket);
         return -1;
     }

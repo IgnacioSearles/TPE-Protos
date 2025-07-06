@@ -36,6 +36,18 @@ socks5_state request_read(struct selector_key *key) {
                 strcpy(data->target_host, result.target_host);
                 data->target_port = result.target_port;
                 data->target_atyp = result.atyp;
+                
+                if (result.cmd != SOCKS5_CMD_CONNECT) {
+                    LOG_A(LOG_DEBUG, "REQUEST_READ: Unsupported command %d", result.cmd);
+                    data->reply_code = SOCKS5_REP_COMMAND_NOT_SUPPORTED;
+                    return REQUEST_WRITE;
+                }
+                
+                if (result.atyp != SOCKS5_ATYP_IPV4 && result.atyp != SOCKS5_ATYP_IPV6 && result.atyp != SOCKS5_ATYP_DOMAIN) {
+                    LOG_A(LOG_DEBUG, "REQUEST_READ: Unsupported address type %d", result.atyp);
+                    data->reply_code = SOCKS5_REP_ADDRESS_TYPE_NOT_SUPPORTED;
+                    return REQUEST_WRITE;
+                }
             
                 LOG_A(LOG_DEBUG, "REQUEST_READ: Attempting connection to %s:%d (ATYP=%d)", data->target_host, data->target_port, data->target_atyp);
             
@@ -49,8 +61,24 @@ socks5_state request_read(struct selector_key *key) {
                     data->reply_code = SOCKS5_REP_SUCCESS;
                     return CONNECTING;
                 } else {
-                    LOG_A(LOG_DEBUG, "REQUEST_READ: Failed to connect to %s:%d", data->target_host, data->target_port);
-                    data->reply_code = SOCKS5_REP_HOST_UNREACH;
+                    LOG_A(LOG_DEBUG, "REQUEST_READ: Failed to connect to %s:%d (errno=%d)", data->target_host, data->target_port, errno);
+                    switch (errno) {
+                        case ECONNREFUSED:
+                            data->reply_code = SOCKS5_REP_CONNECTION_REFUSED;
+                            break;
+                        case ENETUNREACH:
+                            data->reply_code = SOCKS5_REP_NETWORK_UNREACHABLE;
+                            break;
+                        case EHOSTUNREACH:
+                            data->reply_code = SOCKS5_REP_HOST_UNREACH;
+                            break;
+                        case ETIMEDOUT:
+                            data->reply_code = SOCKS5_REP_TTL_EXPIRED;
+                            break;
+                        default:
+                            data->reply_code = SOCKS5_REP_HOST_UNREACH;
+                            break;
+                    }
                     return REQUEST_WRITE;
                 }
             } else if (!result.valid) {

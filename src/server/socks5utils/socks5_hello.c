@@ -59,6 +59,7 @@ socks5_state hello_write(struct selector_key *key) {
         
         if (data->auth_method == AUTH_METHOD_NO_METHODS) {
             LOG(LOG_DEBUG, "HELLO_WRITE: No supported methods - terminating");
+            data->reply_code = SOCKS5_REP_GENERAL_FAILURE; // TODO revisar si este es el correcto
             return ERROR;
         } else {
             LOG(LOG_DEBUG, "HELLO_WRITE: → Transitioning to AUTH_READ");

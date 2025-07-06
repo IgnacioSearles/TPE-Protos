@@ -133,7 +133,16 @@ socks5_request_parser_result parse_socks5_request(uint8_t* data, size_t data_len
     uint8_t rsv = data[2];
     result.atyp = data[3];
     
-    if (version != SOCKS5_VERSION || rsv != 0x00 || result.cmd != SOCKS5_CMD_CONNECT) {
+    if (version != SOCKS5_VERSION) {
+        return result;
+    }
+    
+    if (rsv != SOCKS5_RSV_EXPECTED) {
+        return result;
+    }
+    
+    if (result.cmd != SOCKS5_CMD_CONNECT) {
+        result.valid = true;
         return result;
     }
     

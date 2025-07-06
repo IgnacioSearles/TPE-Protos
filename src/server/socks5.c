@@ -73,6 +73,7 @@ int socks5_init(const int client_fd, fd_selector s, server_config* config, serve
     socks->stats = stats;
     socks->auth_ok = false;
     socks->auth_method = 0;
+    socks->reply_code = SOCKS5_REP_GENERAL_FAILURE;
 
     buffer_init(&(socks->read_buffer), INITIAL_BUFFER_SIZE, socks->read_raw_buff);
     buffer_init(&(socks->write_buffer), INITIAL_BUFFER_SIZE, socks->write_raw_buff);

@@ -36,6 +36,8 @@
 #define SOCKS5_REP_COMMAND_NOT_SUPPORTED    0x07
 #define SOCKS5_REP_ADDRESS_TYPE_NOT_SUPPORTED    0x08
 
+#define SOCKS5_RSV_EXPECTED 0x00
+
 // Códigos de autenticación subnegociación (RFC 1929)
 #define AUTH_SUCCESS    0x00
 #define AUTH_FAILURE    0x01

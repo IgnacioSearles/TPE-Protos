@@ -56,7 +56,7 @@ El cliente se usa para interactuar con el servidor mediante PCTP:
 Protocolo personalizado para configurar y monitorear el servidor SOCKS5 en tiempo real.
 
 ### 📌 Detalles:
-Todos los comandos deben terminar en \n o \r\n.
+Todos los comandos deben terminar en `\n` o `\r\n`.
 
 Se requiere login antes de ejecutar comandos principales.
 

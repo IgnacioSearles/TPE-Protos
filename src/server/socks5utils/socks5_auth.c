@@ -84,7 +84,7 @@ socks5_state auth_write(struct selector_key *key) {
             if (!buffer_can_read(&data->write_buffer)) {
                 if (!data->auth_ok) {
                     LOG(LOG_DEBUG, "AUTH_WRITE: Authentication failed - terminating");
-                    data->reply_code = SOCKS5_REP_CONNECTION_NOT_ALLOWED;
+                    data->reply_code = SOCKS5_REP_GENERAL_FAILURE;
                     return ERROR;
                 } else {
                     LOG(LOG_DEBUG, "AUTH_WRITE: → Transitioning to REQUEST_READ");

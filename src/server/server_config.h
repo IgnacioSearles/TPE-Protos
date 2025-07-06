@@ -49,6 +49,14 @@ int add_user(server_config* config, char* user, char* pass, user_role role);
 int del_user(server_config* config, char* user_to_del, int name_len);
 
 /*
+ *  Cuenta el número de usuarios administradores
+ *
+ *  Retorna el número de administradores en la configuración
+ *
+ * */
+int admin_count(server_config* config);
+
+/*
  *  Crea la configuracion inicial se guarda en el stack, no hace malloc
  * */
 server_config create_config();

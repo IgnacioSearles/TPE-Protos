@@ -37,6 +37,16 @@ int del_user(server_config* config, char* user_to_del, int name_len) {
     return 0;
 }
 
+int admin_count(server_config* config) {
+    int count = 0;
+    for (int i = 0; i < config->user_count; i++) {
+        if (config->users[i].role == ADMIN) {
+            count++;
+        }
+    }
+    return count;
+}
+
 server_config create_config() {
     server_config config = {
         .socks_addr = NULL,

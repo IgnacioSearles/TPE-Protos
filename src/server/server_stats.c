@@ -104,7 +104,7 @@ void log_client_connected_to_destination_server(server_stats stats, int client_f
         return;
 
     log->entry.target_port = target_port;
-    strncpy(log->entry.target_host, target_host, MAX_HOST_LEN); // the struct is allocated with calloc so no need to null terminate just in case
+    strncpy(log->entry.target_host, target_host, MAX_HOST_LEN - 1); // the struct is allocated with calloc so no need to null terminate just in case
 }
 
 void log_bytes_proxied(server_stats stats, int client_fd, uint64_t bytes) {

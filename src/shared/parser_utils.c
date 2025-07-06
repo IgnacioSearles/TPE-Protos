@@ -5,7 +5,7 @@
 #include "parser_utils.h"
 
 const char *parser_utils_strcmpi_event(const enum string_cmp_event_types type) {
-    const char *ret;
+    const char *ret = "eq(c)";
 
     switch (type) {
     case STRING_CMP_MAYEQ:

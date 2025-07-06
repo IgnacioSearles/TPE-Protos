@@ -10,6 +10,7 @@ login commands: (must be executed in that order)
 main commands: (may be executed once logged in)
     LOGS [N] ([N] is optional)
     STATS
+    DEL [user]
     ADD ADMIN (followed by login commands with the new credentials)
     ADD BASIC (followed by login commands with the new credentials)
     EXIT

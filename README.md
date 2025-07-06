@@ -69,9 +69,10 @@ PASS [contraseña]
 ### 🧭 Comandos principales (requieren login previo):
 
 ```
-LOGS [N]         # Muestra los últimos N logs (N es opcional)
-STATS            # Estadísticas de uso del proxy
-ADD ADMIN        # Agrega un nuevo usuario ADMIN (requiere login nuevo)
-ADD BASIC        # Agrega un nuevo usuario BASIC (requiere login nuevo)
-EXIT             # Cierra la sesión
+LOGS [N]             # Muestra los últimos N logs (N es opcional)
+STATS                # Estadísticas de uso del proxy
+ADD ADMIN            # Agrega un nuevo usuario ADMIN (debe ser seguido de los comandos de login con los datos del nuevo usuario)
+ADD BASIC            # Agrega un nuevo usuario BASIC (debe ser seguido de los comandos de login con los datos del nuevo usuario)
+DEL [nombre_usuario] # Borra el usuario con [nombre_usuario]
+EXIT                 # Cierra la sesión
 ```

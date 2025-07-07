@@ -9,3 +9,6 @@ obj
 bin
 .log
 
+# FORMAT FILE
+.clang-format
+

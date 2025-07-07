@@ -1,11 +1,14 @@
 #include "selector.h"
 #include "server_stats.h"
 #include "socks5.h"
+#include "stm.h"
+#include <asm-generic/errno.h>
 #include <logger.h>
 #include <socks5_request.h>
 #include <socks5_protocol.h>
 #include <netutils.h>
 #include <buffer.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
@@ -13,56 +16,83 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+
+uint8_t get_reply_code() {
+    switch (errno) {
+        case ECONNREFUSED:
+            return SOCKS5_REP_CONNECTION_REFUSED;
+        case ENETUNREACH:
+            return SOCKS5_REP_NETWORK_UNREACHABLE;
+        case EHOSTUNREACH:
+            return SOCKS5_REP_HOST_UNREACH;
+        case ETIMEDOUT:
+            return SOCKS5_REP_TTL_EXPIRED;
+        default:
+            return SOCKS5_REP_HOST_UNREACH;
+    }
+
+    return SOCKS5_REP_GENERAL_FAILURE;
+}
+
+socks5_state connecting_response(struct selector_key *key) {
+    LOG(LOG_DEBUG, "CONNECTING: One of the connection in progress sockets finished");
+    struct socks5* data = ATTACHMENT(key);
+
+    selector_unregister_fd(key->s, data->origin_fd);
+
+    int error = 0;
+    socklen_t len = sizeof(error);
+    if (getsockopt(data->origin_fd, SOL_SOCKET, SO_ERROR, &error, &len) == 0) {
+        if (error == 0) {
+            LOG_A(LOG_DEBUG, "CONNECTED: Connection successful to %s:%d", data->target_host, data->target_port);
+            data->reply_code = SOCKS5_REP_SUCCESS;
+            return CONNECTING_RESPONSE;
+        } else {
+            LOG(LOG_DEBUG, "CONNECTED: connection not successful, should try again");
+            return connecting(key);
+        }
+    }
+
+    return ERROR;
+}
+
 socks5_state connecting(struct selector_key *key) {
     struct socks5* data = ATTACHMENT(key);
 
-    if (data->origin_fd >= 0) {
-        log_client_connected_to_destination_server(data->stats, data->client_fd, data->target_host, data->target_port);
-        LOG_A(LOG_DEBUG, "CONNECTING: Connection initiated to %s:%d (fd=%d)", data->target_host, data->target_port, data->origin_fd);
-        data->reply_code = SOCKS5_REP_SUCCESS;
-        return CONNECTING_RESPONSE;
-    } else {
-        LOG_A(LOG_DEBUG, "CONNECTING: Failed to connect to %s:%d (errno=%d)", data->target_host, data->target_port, errno);
-        switch (errno) {
-            case ECONNREFUSED:
-                data->reply_code = SOCKS5_REP_CONNECTION_REFUSED;
-                break;
-            case ENETUNREACH:
-                data->reply_code = SOCKS5_REP_NETWORK_UNREACHABLE;
-                break;
-            case EHOSTUNREACH:
-                data->reply_code = SOCKS5_REP_HOST_UNREACH;
-                break;
-            case ETIMEDOUT:
-                data->reply_code = SOCKS5_REP_TTL_EXPIRED;
-                break;
-            default:
-                data->reply_code = SOCKS5_REP_HOST_UNREACH;
-                break;
+    LOG(LOG_DEBUG, "CONNECTING: Got address info, now trying to connect");
+
+    for (struct addrinfo* rp = data->res; rp != NULL; rp = rp->ai_next) {
+        int sock = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+        set_non_blocking(sock);
+
+        if (sock < 0) continue;
+        
+        if (connect(sock, rp->ai_addr, rp->ai_addrlen) != 0) {
+            if (errno == EINPROGRESS) {
+                LOG(LOG_DEBUG, "CONNECTING: Registering socket to wait for connection EINPROGRESS");
+                data->origin_fd = sock;
+                data->res = rp->ai_next;
+                selector_register(key->s, sock, &socks5_handler, OP_WRITE, key->data);
+                return AWAITING_CONNECTION;
+            } else {
+                LOG(LOG_DEBUG, "CONNECTING: Could not connect with address info");
+                data->reply_code = get_reply_code();
+                close(sock);
+            }
+        } else {
+            LOG(LOG_DEBUG, "CONNECTING: Didn't have to wait to connect");
+            data->origin_fd = sock;
+            freeaddrinfo(data->res);
+            return CONNECTING_RESPONSE;
         }
     }
+
+    LOG(LOG_DEBUG, "CONNECTING: host not reachable");
+    freeaddrinfo(data->res);
+    data->res = NULL;
+    data->reply_code = SOCKS5_REP_HOST_UNREACH;
+
     return REQUEST_WRITE;
-}
-
-void connect_to_host_callback(int socket, fd_selector selector, void* data) {
-    struct socks5* socks5 = (struct socks5*) data;
-
-    socks5->origin_fd = socket;
-
-    struct selector_key key = {
-        .data = socks5,
-        .s = selector,
-        .fd = socks5->client_fd
-    };
-
-    LOG_A(LOG_DEBUG, "State at callback start: %d", stm_state(&socks5->stm));
-    socks5_state next = stm_handler_read(&socks5->stm, &key);
-
-    if (next != CONNECTING_RESPONSE && next != REQUEST_WRITE) {
-        LOG_A(LOG_ERROR, "Illegal next state. STATE: %d", next);
-    }
-
-    selector_set_interest(selector, socks5->client_fd, OP_WRITE);
 }
 
 socks5_state request_read(struct selector_key *key) {
@@ -109,7 +139,7 @@ socks5_state request_read(struct selector_key *key) {
                 snprintf(port_str, sizeof(port_str), "%d", data->target_port);
 
                 selector_set_interest(key->s, data->client_fd, OP_NOOP);
-                connect_to_host_non_blocking(data->target_host, port_str, key->s, (void (*)(int, fd_selector, void*))connect_to_host_callback, (void*)data);
+                get_addr_info_non_blocking(data->target_host, port_str, key->s, data->client_fd, &data->res);
                 return CONNECTING;
             } else if (!result.valid) {
                 LOG(LOG_DEBUG, "REQUEST_READ: INVALID request - terminating");
@@ -136,26 +166,19 @@ socks5_state request_read(struct selector_key *key) {
 
 socks5_state connected(struct selector_key *key) {
     struct socks5* data = ATTACHMENT(key);
-    
-    LOG(LOG_DEBUG, "CONNECTED: Checking connection status");
-    
-    int error = 0;
-    socklen_t len = sizeof(error);
-    if (getsockopt(data->origin_fd, SOL_SOCKET, SO_ERROR, &error, &len) == 0) {
-        if (error == 0) {
-            LOG_A(LOG_DEBUG, "CONNECTED: Connection successful to %s:%d", 
-                   data->target_host, data->target_port);
-            data->reply_code = SOCKS5_REP_SUCCESS;
-        } else {
-            LOG_A(LOG_DEBUG, "CONNECTED: Connection failed: %s", strerror(error));
-            data->reply_code = SOCKS5_REP_HOST_UNREACH;
-        }
-        
+
+    if (data->res == NULL) {
+        LOG(LOG_DEBUG, "CONNECTED: Connection failed");
+        data->reply_code = SOCKS5_REP_HOST_UNREACH;
+
         return REQUEST_WRITE;
-    } else {
-        LOG_A(LOG_DEBUG, "CONNECTED: Error checking socket status: %s", strerror(errno));
-        return ERROR;
     }
+
+    LOG(LOG_DEBUG, "CONNECTED: Connected to server");
+    log_client_connected_to_destination_server(data->stats, data->client_fd, data->target_host, data->target_port);
+    data->reply_code = SOCKS5_REP_SUCCESS;
+
+    return REQUEST_WRITE;
 }
 
 socks5_state request_write(struct selector_key *key) {

@@ -1,4 +1,5 @@
 #include "selector.h"
+#include "stm.h"
 #include <logger.h>
 #include <socks5.h>
 #include <server_stats.h>
@@ -24,6 +25,7 @@
 static void socks5_read(struct selector_key *key);
 static void socks5_write(struct selector_key *key);
 static void socks5_close(struct selector_key *key);
+static void socks5_unblock(struct selector_key *key);
 
 static const struct state_definition client_statbl[] = {
     { .state = HELLO_READ,    .on_read_ready  = hello_read    },
@@ -32,8 +34,9 @@ static const struct state_definition client_statbl[] = {
     { .state = AUTH_WRITE,    .on_write_ready = auth_write    },  
     { .state = REQUEST_READ,  .on_read_ready  = request_read  },
     { .state = REQUEST_WRITE, .on_write_ready = request_write },
-    { .state = CONNECTING,    .on_read_ready = connecting },
-    { .state = CONNECTING_RESPONSE,    .on_write_ready = connected  }, 
+    { .state = CONNECTING,    .on_block_ready = connecting    },
+    { .state = AWAITING_CONNECTION, .on_write_ready = connecting_response },
+    { .state = CONNECTING_RESPONSE, .on_write_ready = connected  }, 
     { .state = COPY,          .on_arrival     = copy_on_arrival,
                               .on_read_ready  = copy_r,         // Cliente → Servidor remoto
                               .on_write_ready = copy_w          }, // Buffer → Cliente
@@ -41,10 +44,11 @@ static const struct state_definition client_statbl[] = {
     { .state = ERROR  }
 };
 
-static const struct fd_handler socks5_handler = {
+const struct fd_handler socks5_handler = {
     .handle_read  = socks5_read,
     .handle_write = socks5_write,
     .handle_close = socks5_close,
+    .handle_block = socks5_unblock
 };
 
 static const struct state_machine socks5_stm = {
@@ -104,18 +108,18 @@ static bool is_write_state(const socks5_state state) {
 
 static bool is_read_state(const socks5_state state) {
     return (state == HELLO_READ || state == AUTH_READ || 
-            state == REQUEST_READ || state == COPY || state == CONNECTING);
+            state == REQUEST_READ || state == COPY);
 }
 
 static void socks5_read(struct selector_key *key) {
-    struct state_machine* stm = &ATTACHMENT(key)->stm;
-    socks5_state next = stm_handler_read(stm, key);
+    struct socks5* socks = ATTACHMENT(key);
+    socks5_state next = stm_handler_read(&socks->stm, key);
     
     LOG_A(LOG_DEBUG, "SOCKS5: Read event → state %d", next);
     
     if (ERROR == next || DONE == next) {
         LOG_A(LOG_DEBUG, "SOCKS5: Terminating connection (state=%d)", next);
-        selector_unregister_fd(key->s, key->fd);
+        selector_unregister_fd(key->s, socks->client_fd);
     } else {
         fd_interest interest = OP_NOOP;
         if (is_write_state(next)) {
@@ -126,14 +130,14 @@ static void socks5_read(struct selector_key *key) {
         
         if (interest != OP_NOOP) {
             LOG_A(LOG_DEBUG, "SOCKS5: Changing selector interest to %d", interest);
-            selector_set_interest_key(key, interest);
+            selector_set_interest(key->s, socks->client_fd, interest);
         }
     }
 }
 
 static void socks5_write(struct selector_key *key) {
-    struct state_machine* stm = &ATTACHMENT(key)->stm;
-    socks5_state next = stm_handler_write(stm, key);
+    struct socks5* socks = ATTACHMENT(key);
+    socks5_state next = stm_handler_write(&socks->stm, key);
     
     LOG_A(LOG_DEBUG, "SOCKS5: Write event → state %d", next);
     
@@ -150,14 +154,38 @@ static void socks5_write(struct selector_key *key) {
 
         if (interest != OP_NOOP) {
             LOG_A(LOG_DEBUG, "SOCKS5: Changing selector interest to %d", interest);
-            selector_set_interest_key(key, interest);
+            selector_set_interest(key->s, socks->client_fd, interest);
+        }
+    }
+}
+
+static void socks5_unblock(struct selector_key *key) {
+    struct socks5* socks = ATTACHMENT(key);
+    socks5_state next = stm_handler_block(&socks->stm, key);
+
+    LOG_A(LOG_DEBUG, "SOCKS5: Un-Block event → state %d", next);
+
+    if (ERROR == next || DONE == next) {
+        LOG_A(LOG_DEBUG, "SOCKS5: Terminating connection (state=%d)", next);
+        selector_unregister_fd(key->s, key->fd);
+    } else {
+        fd_interest interest = OP_NOOP;
+        if (is_read_state(next)) {
+            interest = OP_READ;
+        } else if (is_write_state(next)) {
+            interest = OP_WRITE;
+        }
+
+        if (interest != OP_NOOP) {
+            LOG_A(LOG_DEBUG, "SOCKS5: Changing selector interest to %d", interest);
+            selector_set_interest(key->s, socks->client_fd, interest);
         }
     }
 }
 
 static void socks5_close(struct selector_key *key) {
     struct socks5* socks = ATTACHMENT(key);
-    if (socks == NULL) {
+    if (socks == NULL || key->fd == socks->origin_fd) {
         return;
     }
     
@@ -179,3 +207,4 @@ static void socks5_close(struct selector_key *key) {
     
     free(socks);
 }
+

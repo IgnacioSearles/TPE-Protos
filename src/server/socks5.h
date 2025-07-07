@@ -21,6 +21,7 @@ typedef enum socks5_state {
     REQUEST_READ,
     REQUEST_WRITE,
     CONNECTING,
+    AWAITING_CONNECTION,
     CONNECTING_RESPONSE,
     COPY,
     DONE,
@@ -58,7 +59,8 @@ typedef struct socks5 {
     uint16_t target_port;
     uint8_t target_atyp;
     uint8_t reply_code;
-    
+
+    struct addrinfo *res;
 } socks5;
 
 int socks5_init(const int client_fd, fd_selector s, server_config* config, server_stats stats);

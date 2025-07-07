@@ -219,15 +219,12 @@ int create_passive_tcp_socket(const char* ip_str, uint16_t port, uint32_t max_co
     return passive_tcp_socket;
 }
 
-struct connect_args {
+struct addr_info_args {
     char* host;
     char* port;
+    struct addrinfo** out;
+    fd_selector selector;
     int notify_fd;
-};
-
-struct connection_finished {
-    void (*callback)(int, fd_selector, void*);
-    void* data;
 };
 
 static char* copy_str(const char* str) {
@@ -238,119 +235,50 @@ static char* copy_str(const char* str) {
     return out;
 }
 
-void* connect_in_other_thread(void* arg_ptr) {
-    LOG(LOG_DEBUG, "Attempting connection");
-    struct connect_args* args = (struct connect_args*) arg_ptr;
+void* getaddrinfo_in_other_thread(void* data) {
+    struct addr_info_args* addr_info_args = (struct addr_info_args*) data;
 
     struct addrinfo hints = {
         .ai_family = AF_UNSPEC,
         .ai_socktype = SOCK_STREAM
     };
-    struct addrinfo *res;
 
-    if (getaddrinfo(args->host, args->port, &hints, &res) != 0) {
+    if (getaddrinfo(addr_info_args->host, addr_info_args->port, &hints, addr_info_args->out) != 0) {
         LOG(LOG_DEBUG, "Could not get address info");
-        int invalid_sock = -1;
-        if (write(args->notify_fd, &invalid_sock, sizeof(invalid_sock)) < 0) {
-            LOG(LOG_DEBUG, "Could not write to pipe");
-        }
-        free(args->host);
-        free(args->port);
-        close(args->notify_fd);
-        free(args);
+        selector_notify_block(addr_info_args->selector, addr_info_args->notify_fd);
         return NULL;
     }
 
-    for (struct addrinfo* rp = res; rp != NULL; rp = rp->ai_next) {
-        int sock = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
-        if (sock < 0) continue;
+    free(addr_info_args->host);
+    free(addr_info_args->port);
+    free(addr_info_args);
 
-        if (connect(sock, rp->ai_addr, rp->ai_addrlen) == 0) {
-            set_non_blocking(sock);
-            freeaddrinfo(res);
-            if (write(args->notify_fd, &sock, sizeof(sock)) < 0) {
-                LOG(LOG_DEBUG, "Could not write to pipe");
-            }
-            LOG(LOG_DEBUG, "Connected to address");
-            free(args->host);
-            free(args->port);
-            close(args->notify_fd);
-            free(args);
-            return NULL;
-        }
+    LOG(LOG_DEBUG, "Got address info in another thread, merging to main");
 
-        close(sock);
-    }
-
-    freeaddrinfo(res);
-    int invalid_sock = -1;
-
-    if (write(args->notify_fd, &invalid_sock, sizeof(invalid_sock)) < 0) {
-        LOG(LOG_DEBUG, "Could not write to pipe");
-    }
-
-    free(args->host);
-    free(args->port);
-    close(args->notify_fd);
-    free(args);
+    selector_notify_block(addr_info_args->selector, addr_info_args->notify_fd);
 
     return NULL;
 }
 
-static void connect_finished(struct selector_key *key) {
-    LOG(LOG_DEBUG, "Connection finished callback");
-    struct connection_finished* data = (struct connection_finished*)key->data;
+int get_addr_info_non_blocking(const char* host, const char *port, fd_selector selector, int notify_fd, struct addrinfo** out) {
+    LOG(LOG_DEBUG, "Getting address info non blocking");
 
-    int socket;
-    if (read(key->fd, &socket, sizeof(socket)) < 0) {
-        return;
-    }
-
-    selector_unregister_fd(key->s, key->fd);
-    close(key->fd);
-
-    data->callback(socket, key->s, data->data);
-}
-
-static fd_handler get_addr_info_finished_handler = {
-    .handle_read = connect_finished
-};
-
-int connect_to_host_non_blocking(const char* host, const char *port, fd_selector selector, void(*callback)(int, fd_selector, void*), void* data) {
-    int pipe_fds[2];
-    if (pipe(pipe_fds) < 0) {
-        LOG(LOG_DEBUG, "Could not create pipes for get_addr_info");
-        return -1;
-    }
-
-    struct connection_finished* callback_data = malloc(sizeof(struct connection_finished));
-    callback_data->callback = callback;
-    callback_data->data = data;
-    if (selector_register(selector, pipe_fds[0], &get_addr_info_finished_handler, OP_READ, (void*)callback_data) != SELECTOR_SUCCESS) {
-        free(callback_data);
-        close(pipe_fds[0]);
-        close(pipe_fds[1]);
-        LOG(LOG_DEBUG, "Could no register selector for get_addr_info");
-        return -1;
-    }
-
-    struct connect_args* args = malloc(sizeof(struct connect_args));
+    struct addr_info_args* args = malloc(sizeof(struct addr_info_args));
     args->host = copy_str(host);
     args->port = copy_str(port);
-    args->notify_fd = pipe_fds[1];
+    args->selector = selector;
+    args->notify_fd = notify_fd;
+    args->out = out;
 
     pthread_t tid;
-    if (pthread_create(&tid, NULL, connect_in_other_thread, (void*)args) != 0) {
-        free(callback_data);
-        close(pipe_fds[0]);
-        close(pipe_fds[1]);
+    if (pthread_create(&tid, NULL, getaddrinfo_in_other_thread, (void*)args) != 0) {
         free(args->host);
         free(args->port);
         free(args);
         LOG(LOG_DEBUG, "Could not create connect thread");
         return -1;
-    }
-
+    } 
+    
     return 0;
 }
 

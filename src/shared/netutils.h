@@ -7,6 +7,7 @@
 
 #include "buffer.h"
 #include <selector.h>
+#include <netdb.h>
 
 /*
  * Setea un socket como no bloqueante 
@@ -35,7 +36,7 @@ int create_passive_tcp_socket(const char* ip_str, uint16_t port, uint32_t max_co
  * */
 int connect_to_host(const char *host, const char *port);
 
-int connect_to_host_non_blocking(const char* host, const char *port, fd_selector selector, void(*callback)(int, fd_selector, void*), void* data);
+int get_addr_info_non_blocking(const char* host, const char *port, fd_selector selector, int notify_fd, struct addrinfo** out);
 
 /*
  * Obtiene la dirección remota del socket

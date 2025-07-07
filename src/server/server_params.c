@@ -19,7 +19,8 @@ void print_help(const char *program_name) {
 }
 
 void print_version(const char* program_name) {
-    printf("%s version %s\n", program_name, VERSION);
+    printf("socks5 version %s\n"
+           "ITBA Protocolos de Comunicación 2025a -- Group 10\n", VERSION);
 }
 
 static char* copy_str(const char* str) {

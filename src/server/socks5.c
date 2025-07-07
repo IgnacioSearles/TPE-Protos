@@ -1,3 +1,4 @@
+#include "selector.h"
 #include <logger.h>
 #include <socks5.h>
 #include <server_stats.h>
@@ -11,8 +12,6 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/socket.h>
-#include <string.h>
-#include <errno.h>
 #include <arpa/inet.h>
 #include <netdb.h>
 
@@ -33,7 +32,8 @@ static const struct state_definition client_statbl[] = {
     { .state = AUTH_WRITE,    .on_write_ready = auth_write    },  
     { .state = REQUEST_READ,  .on_read_ready  = request_read  },
     { .state = REQUEST_WRITE, .on_write_ready = request_write },
-    { .state = CONNECTING,    .on_write_ready = connecting    }, 
+    { .state = CONNECTING,    .on_read_ready = connecting },
+    { .state = CONNECTING_RESPONSE,    .on_write_ready = connected  }, 
     { .state = COPY,          .on_arrival     = copy_on_arrival,
                               .on_read_ready  = copy_r,         // Cliente → Servidor remoto
                               .on_write_ready = copy_w          }, // Buffer → Cliente
@@ -84,8 +84,9 @@ int socks5_init(const int client_fd, fd_selector s, server_config* config, serve
     
     stm_init(&socks->stm);
     
-    if (selector_register(s, client_fd, &socks5_handler, OP_READ, socks) != SELECTOR_SUCCESS) {
-        LOG(LOG_WARN, "SOCKS5: Failed to register with selector");
+    selector_status status;
+    if ((status = selector_register(s, client_fd, &socks5_handler, OP_READ, socks)) != SELECTOR_SUCCESS) {
+        LOG_A(LOG_WARN, "SOCKS5: Failed to register with selector. STATUS = %d", status);
         free(socks);
         return -1;
     }
@@ -98,12 +99,12 @@ int socks5_init(const int client_fd, fd_selector s, server_config* config, serve
 
 static bool is_write_state(const socks5_state state) {
     return (state == HELLO_WRITE || state == AUTH_WRITE || 
-            state == REQUEST_WRITE || state == CONNECTING);
+            state == REQUEST_WRITE || state == CONNECTING_RESPONSE);
 }
 
 static bool is_read_state(const socks5_state state) {
     return (state == HELLO_READ || state == AUTH_READ || 
-            state == REQUEST_READ || state == COPY);
+            state == REQUEST_READ || state == COPY || state == CONNECTING);
 }
 
 static void socks5_read(struct selector_key *key) {

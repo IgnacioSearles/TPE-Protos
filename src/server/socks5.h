@@ -21,6 +21,7 @@ typedef enum socks5_state {
     REQUEST_READ,
     REQUEST_WRITE,
     CONNECTING,
+    CONNECTING_RESPONSE,
     COPY,
     DONE,
     ERROR,

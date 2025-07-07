@@ -22,7 +22,7 @@ void print_version(const char* program_name) {
     printf("%s version %s\n", program_name, VERSION);
 }
 
-char* copy_str(const char* str) {
+static char* copy_str(const char* str) {
     int len = strlen(str);
     char* out = malloc(len + 1);
     if (out == NULL) return NULL;

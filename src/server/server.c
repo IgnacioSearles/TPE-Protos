@@ -152,7 +152,7 @@ int main(int argc, char** argv) {
     while (!done) {
         selector_status status = selector_select(selector);
         if (status != SELECTOR_SUCCESS && status != SELECTOR_MAXFD) {
-            LOG(LOG_ERROR, "server error: fatal error in selection");
+            LOG_A(LOG_ERROR, "server error: fatal error in selection. STATUS: %d", status);
             break;
         }
     }

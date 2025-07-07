@@ -6,6 +6,7 @@
 #include <sys/socket.h>
 
 #include "buffer.h"
+#include <selector.h>
 
 /*
  * Setea un socket como no bloqueante 
@@ -27,10 +28,14 @@ int create_passive_tcp_socket(const char* ip_str, uint16_t port, uint32_t max_co
 /*
  * Crea un socket TCP conectado a un host determinado en un puerto determinado
  *
+ * Se bloquea
+ *
  * retorna menor a 0 si ocurrio un error
- * retorna el fd del socket si se realizo sin problmea
+ * retorna el fd del socket si se realizo sin problema
  * */
 int connect_to_host(const char *host, const char *port);
+
+int connect_to_host_non_blocking(const char* host, const char *port, fd_selector selector, void(*callback)(int, fd_selector, void*), void* data);
 
 /*
  * Obtiene la dirección remota del socket

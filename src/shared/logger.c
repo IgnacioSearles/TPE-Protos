@@ -14,7 +14,7 @@ typedef struct {
 static logging_level_representation logging_levels[] = {
     {"DEBUG", LOG_DEBUG},
     {"INFO",  LOG_INFO},
-    {"WARNG", LOG_WARN},
+    {"WARN", LOG_WARN},
     {"ERROR", LOG_ERROR},
     {"NONE",  LOG_NONE},
     {NULL, -1}

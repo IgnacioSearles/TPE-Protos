@@ -167,13 +167,6 @@ socks5_state request_read(struct selector_key *key) {
 socks5_state connected(struct selector_key *key) {
     struct socks5* data = ATTACHMENT(key);
 
-    if (data->res == NULL) {
-        LOG(LOG_DEBUG, "CONNECTED: Connection failed");
-        data->reply_code = SOCKS5_REP_HOST_UNREACH;
-
-        return REQUEST_WRITE;
-    }
-
     LOG(LOG_DEBUG, "CONNECTED: Connected to server");
     log_client_connected_to_destination_server(data->stats, data->client_fd, data->target_host, data->target_port);
     data->reply_code = SOCKS5_REP_SUCCESS;

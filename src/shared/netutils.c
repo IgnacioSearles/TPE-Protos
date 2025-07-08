@@ -249,13 +249,13 @@ void* getaddrinfo_in_other_thread(void* data) {
         return NULL;
     }
 
-    free(addr_info_args->host);
-    free(addr_info_args->port);
-    free(addr_info_args);
-
     LOG(LOG_DEBUG, "Got address info in another thread, merging to main");
 
     selector_notify_block(addr_info_args->selector, addr_info_args->notify_fd);
+
+    free(addr_info_args->host);
+    free(addr_info_args->port);
+    free(addr_info_args);
 
     return NULL;
 }

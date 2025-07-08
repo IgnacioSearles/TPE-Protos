@@ -251,11 +251,14 @@ void* getaddrinfo_in_other_thread(void* data) {
 
     LOG(LOG_DEBUG, "Got address info in another thread, merging to main");
 
-    selector_notify_block(addr_info_args->selector, addr_info_args->notify_fd);
+    fd_selector selector = addr_info_args->selector;
+    int notify_fd = addr_info_args->notify_fd;
 
     free(addr_info_args->host);
     free(addr_info_args->port);
     free(addr_info_args);
+
+    selector_notify_block(selector, notify_fd);
 
     return NULL;
 }

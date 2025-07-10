@@ -30,7 +30,7 @@ make client
 Ejecutá el servidor con:
 
 ```
-./bin/server [options]
+./bin/socks5d [options]
 ```
 
 📄 Opciones disponibles:

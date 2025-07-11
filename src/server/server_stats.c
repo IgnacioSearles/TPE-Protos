@@ -83,6 +83,11 @@ void log_connection_open(server_stats stats, int client_fd) {
     log->entry.auth_success = AWAITING_AUTHENTICATION;
     log->entry.timestamp = time(NULL);
     log->entry.is_connection_active = 1;
+    log->entry.target_port = 0;
+    log->entry.target_host[0] = '\0';
+    log->entry.reply_code = 0;
+    log->entry.user = NULL;
+    log->entry.bytes_proxied = 0;
     log->fd = client_fd;
 
     stats->log_index = (stats->log_index + 1) % LOG_SIZE;

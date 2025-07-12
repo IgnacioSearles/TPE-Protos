@@ -201,7 +201,7 @@ int get_io_config(pctp *pctp_data) {
     pctp_data->io_config[pctp_data->io_config_len] = 0;
     int io_config = 0;
     sscanf(pctp_data->io_config, "%d", &io_config);
-    if (io_config == 0) return INITIAL_BUFFER_SIZE;
+    if (io_config < INITIAL_BUFFER_SIZE) return INITIAL_BUFFER_SIZE;
     return io_config;
 }
 

@@ -97,7 +97,7 @@ void origin_read(struct selector_key *key) {
                 LOG_A(LOG_DEBUG, "ORIGIN: Forwarded %ld bytes to client", sent);
                 size_t write_space;
                 buffer_write_ptr(&data->write_buffer, &write_space);
-                if (sent == count && write_space > 0) {
+                if (sent == (ssize_t)count && write_space > 0) {
                     uint8_t* next_ptr = buffer_write_ptr(&data->write_buffer, &write_space);
                     ssize_t next_n = recv(key->fd, next_ptr, write_space, MSG_DONTWAIT);
                     if (next_n > 0) {

@@ -6,6 +6,7 @@
 #include "./pctputils/pctp_users.h"
 #include "./pctputils/pctp_stm.h"
 #include "logger.h"
+#include "selector.h"
 #include "server_stats.h"
 #include <stdlib.h>
 #include <stdio.h>
@@ -58,7 +59,11 @@ int pctp_init(const int client_fd, fd_selector selector, server_config* config, 
     pctp_data->handlers.handle_write = pctp_write;
     pctp_data->handlers.handle_close = pctp_close;
 
-    selector_register(selector, client_fd, &pctp_data->handlers, OP_READ, pctp_data);
+    if (selector_register(selector, client_fd, &pctp_data->handlers, OP_READ, pctp_data) != SELECTOR_SUCCESS) {
+        LOG(LOG_DEBUG, "Could not register fd for pctp connection");
+        free(pctp_data);
+        return -1;
+    }
 
     pctp_data->username_len = 0;
     pctp_data->password_len = 0;

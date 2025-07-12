@@ -8,7 +8,6 @@
 #include "server_stats.h"
 #include <netinet/in.h>
 
-#define INITIAL_BUFFER_SIZE 4096
 #define MAX_DATA_SIZE 256
 
 #define ATTACHMENT(key) ((struct socks5 *)(key)->data)
@@ -46,8 +45,8 @@ typedef struct socks5 {
     buffer read_buffer;
     buffer write_buffer;
     
-    uint8_t read_raw_buff[INITIAL_BUFFER_SIZE];
-    uint8_t write_raw_buff[INITIAL_BUFFER_SIZE];
+    uint8_t* read_raw_buff;
+    uint8_t* write_raw_buff;
     
     server_config* config;
     server_stats stats;

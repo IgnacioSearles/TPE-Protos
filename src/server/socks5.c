@@ -71,6 +71,17 @@ int socks5_init(const int client_fd, fd_selector s, server_config* config, serve
         return -1;
     }
 
+    socks->read_raw_buff = malloc(config->io_buffer_size * sizeof(socks->read_raw_buff[0]));
+    socks->write_raw_buff = malloc(config->io_buffer_size * sizeof(socks->write_raw_buff[0]));
+
+    if (socks->read_raw_buff == NULL || socks->write_raw_buff == NULL) {
+        free(socks->read_raw_buff);
+        free(socks->write_raw_buff);
+        free(socks);
+        LOG(LOG_WARN, "SOCKS5: Failed to allocate memory");
+        return -1;
+    }
+
     socks->client_fd = client_fd;
     socks->origin_fd = -1;
     socks->config = config;
@@ -79,8 +90,8 @@ int socks5_init(const int client_fd, fd_selector s, server_config* config, serve
     socks->auth_method = 0;
     socks->reply_code = SOCKS5_REP_GENERAL_FAILURE;
 
-    buffer_init(&(socks->read_buffer), INITIAL_BUFFER_SIZE, socks->read_raw_buff);
-    buffer_init(&(socks->write_buffer), INITIAL_BUFFER_SIZE, socks->write_raw_buff);
+    buffer_init(&(socks->read_buffer), config->io_buffer_size, socks->read_raw_buff);
+    buffer_init(&(socks->write_buffer), config->io_buffer_size, socks->write_raw_buff);
 
     socks->stm.initial   = socks5_stm.initial;
     socks->stm.max_state = socks5_stm.max_state;
@@ -91,6 +102,8 @@ int socks5_init(const int client_fd, fd_selector s, server_config* config, serve
     selector_status status;
     if ((status = selector_register(s, client_fd, &socks5_handler, OP_READ, socks)) != SELECTOR_SUCCESS) {
         LOG_A(LOG_WARN, "SOCKS5: Failed to register with selector. STATUS = %d", status);
+        free(socks->read_raw_buff);
+        free(socks->write_raw_buff);
         free(socks);
         return -1;
     }
@@ -204,7 +217,8 @@ static void socks5_close(struct selector_key *key) {
         close(socks->client_fd);
         socks->client_fd = -1;
     }
-    
+    free(socks->read_raw_buff);
+    free(socks->write_raw_buff);
     free(socks);
 }
 

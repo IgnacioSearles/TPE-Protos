@@ -61,6 +61,8 @@ socks5_state connecting(struct selector_key *key) {
 
     LOG(LOG_DEBUG, "CONNECTING: Got address info, now trying to connect");
 
+    data->reply_code = SOCKS5_REP_HOST_UNREACH;
+
     for (struct addrinfo* rp = data->res; rp != NULL; rp = rp->ai_next) {
         int sock = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
         set_non_blocking(sock);
@@ -72,7 +74,14 @@ socks5_state connecting(struct selector_key *key) {
                 LOG(LOG_DEBUG, "CONNECTING: Registering socket to wait for connection EINPROGRESS");
                 data->origin_fd = sock;
                 data->res = rp->ai_next;
-                selector_register(key->s, sock, &socks5_handler, OP_WRITE, key->data);
+
+                if (selector_register(key->s, sock, &socks5_handler, OP_WRITE, key->data) != SELECTOR_SUCCESS) {
+                    LOG(LOG_DEBUG, "CONNECTING: Could not register fd");
+                    close(sock);
+                    data->reply_code = SOCKS5_REP_GENERAL_FAILURE;
+                    continue;
+                }
+
                 return AWAITING_CONNECTION;
             } else {
                 LOG(LOG_DEBUG, "CONNECTING: Could not connect with address info");
@@ -87,10 +96,9 @@ socks5_state connecting(struct selector_key *key) {
         }
     }
 
-    LOG(LOG_DEBUG, "CONNECTING: host not reachable");
+    LOG(LOG_DEBUG, "CONNECTING: could not connect to host");
     freeaddrinfo(data->res);
     data->res = NULL;
-    data->reply_code = SOCKS5_REP_HOST_UNREACH;
 
     return REQUEST_WRITE;
 }

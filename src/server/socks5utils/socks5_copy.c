@@ -1,4 +1,5 @@
 #include "server_stats.h"
+#include "socks5_protocol.h"
 #include <logger.h>
 #include <socks5_copy.h>
 #include <selector.h>
@@ -18,7 +19,9 @@ void copy_on_arrival(const unsigned state, struct selector_key *key) {
     LOG_A(LOG_DEBUG, "COPY: Entering tunnel mode - registering origin_fd=%d", data->origin_fd);
     
     if (selector_register(key->s, data->origin_fd, &origin_handler, OP_READ, data) != SELECTOR_SUCCESS) {
-        LOG(LOG_DEBUG, "COPY: Failed to register origin_fd in selector");
+        LOG(LOG_WARN, "COPY: Failed to register origin_fd in selector - TERMINATING CLIENT");
+        data->reply_code = SOCKS5_REP_GENERAL_FAILURE;
+        close(data->client_fd);
     } else {
         LOG(LOG_DEBUG, "COPY: Origin registered - bidirectional tunnel active");
         LOG_A(LOG_DEBUG, "COPY: Cliente[%d] ←→ Proxy ←→ Origin[%d]", data->client_fd, data->origin_fd);

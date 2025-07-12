@@ -38,8 +38,8 @@ static const struct state_definition client_statbl[] = {
     { .state = AWAITING_CONNECTION, .on_write_ready = connecting_response },
     { .state = CONNECTING_RESPONSE, .on_write_ready = connected  }, 
     { .state = COPY,          .on_arrival     = copy_on_arrival,
-                              .on_read_ready  = copy_r,         // Cliente → Servidor remoto
-                              .on_write_ready = copy_w          }, // Buffer → Cliente
+                              .on_read_ready  = copy_bidirectional,         // Cliente → Servidor remoto
+                              .on_write_ready = copy_bidirectional          }, // Buffer → Cliente
     { .state = DONE   },
     { .state = ERROR  }
 };
@@ -135,7 +135,10 @@ static void socks5_read(struct selector_key *key) {
         selector_unregister_fd(key->s, socks->client_fd);
     } else {
         fd_interest interest = OP_NOOP;
-        if (is_write_state(next)) {
+        
+        if (next == COPY) {
+            interest = OP_READ | OP_WRITE;
+        } else if (is_write_state(next)) {
             interest = OP_WRITE;
         } else if (is_read_state(next)) {
             interest = OP_READ;
@@ -159,7 +162,10 @@ static void socks5_write(struct selector_key *key) {
         selector_unregister_fd(key->s, key->fd);
     } else {
         fd_interest interest = OP_NOOP;
-        if (is_read_state(next)) {
+        
+        if (next == COPY) {
+            interest = OP_READ | OP_WRITE;
+        } else if (is_read_state(next)) {
             interest = OP_READ;
         } else if (is_write_state(next)) {
             interest = OP_WRITE;

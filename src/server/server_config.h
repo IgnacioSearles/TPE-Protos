@@ -11,6 +11,8 @@
 #define MAX_INITIAL_USERS 10
 #define MAX_USERS 50
 
+#define INITIAL_SOCKS_BUFFER_SIZE 4096
+
 typedef enum {
     BASIC,
     ADMIN
@@ -60,7 +62,7 @@ int admin_count(server_config* config);
 /*
  *  Crea la configuracion inicial se guarda en el stack, no hace malloc
  * */
-server_config create_config(uint64_t initial_io_buffer_size);
+server_config create_config();
 
 /*
  *  Limpia los datos internos de la configuracion

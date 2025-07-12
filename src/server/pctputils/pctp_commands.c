@@ -173,10 +173,10 @@ void reset_del_state(const unsigned state, struct selector_key *key) {
 }
 
 void write_stats_to_buffer(buffer* write_buffer, server_stats stats) {
-    char current_connections[MAX_MSG_SIZE];
-    char total_connections[MAX_MSG_SIZE];
-    char current_bytes_proxied[MAX_MSG_SIZE];
-    char total_bytes_proxied[MAX_MSG_SIZE];
+    char current_connections[MAX_MSG_LEN];
+    char total_connections[MAX_MSG_LEN];
+    char current_bytes_proxied[MAX_MSG_LEN];
+    char total_bytes_proxied[MAX_MSG_LEN];
     sprintf(current_connections, CURRENT_CONNECTIONS_MSG, get_active_connection_count(stats));
     sprintf(total_connections, TOTAL_CONNECTIONS_MSG, get_total_connection_count(stats));
     sprintf(current_bytes_proxied, CURRENT_BYTES_PROXIED_MSG, get_current_connections_bytes_proxied(stats));
@@ -201,7 +201,7 @@ int get_io_config(pctp *pctp_data) {
     pctp_data->io_config[pctp_data->io_config_len] = 0;
     int io_config = 0;
     sscanf(pctp_data->io_config, "%d", &io_config);
-    if (io_config < INITIAL_BUFFER_SIZE) return INITIAL_BUFFER_SIZE;
+    if (io_config < INITIAL_SOCKS_BUFFER_SIZE) return INITIAL_SOCKS_BUFFER_SIZE;
     return io_config;
 }
 
@@ -209,7 +209,7 @@ void write_n_logs_to_buffer(buffer* write_buffer, server_stats stats, int logs_t
     reset_server_connection_entry_iterator(stats);
     while(has_next_server_connection_entry(stats) && logs_to_send-- > 0) {
         server_connection_entry* entry = get_next_server_connection_entry(stats);
-        char log_entry[MAX_MSG_SIZE];
+        char log_entry[MAX_MSG_LEN];
         struct tm *t = localtime(&entry->timestamp);
         sprintf(log_entry, LOG_ENTRY_MSG, t->tm_year + TM_YEAR_RELATIVE, t->tm_mon + TM_MONTH_RELATIVE, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec,
                 entry->user, entry->source_host, entry->source_port, entry->target_host, entry->target_port,
@@ -222,7 +222,7 @@ void write_n_logs_to_buffer(buffer* write_buffer, server_stats stats, int logs_t
 void write_users_to_buffer(buffer* write_buffer, server_config* config) {
     for (int i=0; i<config->user_count; i++) {
         server_user user = config->users[i];
-        char user_entry[MAX_MSG_SIZE]; 
+        char user_entry[MAX_MSG_LEN]; 
         sprintf(user_entry, USER_ENTRY_MSG, user.user, user.role == ADMIN? "Admin" : "Basic");
         write_msg_to_buffer(write_buffer, user_entry);
     }

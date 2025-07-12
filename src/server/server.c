@@ -14,7 +14,6 @@
 #define MAX_SOCKS5_CONNECTIONS 1000
 #define MAX_PCTP_CONNECTIONS 24
 #define MAX_CONNECTIONS (MAX_SOCKS5_CONNECTIONS + MAX_PCTP_CONNECTIONS)
-#define INITIAL_SOCKS_BUFFER_SIZE 4096
 
 static server_config config;
 static server_stats socks5_server_stats;
@@ -67,7 +66,7 @@ static void accept_pctp(struct selector_key *key) {
 }
 
 int main(int argc, char** argv) {
-    config = create_config(INITIAL_SOCKS_BUFFER_SIZE); 
+    config = create_config(); 
 
     parse_server_params_status status = parse_server_params(argc, argv, &config);
     if (status == PARAMS_SHOULD_EXIT || status == PARAMS_ERROR) {

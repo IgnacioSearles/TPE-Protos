@@ -11,9 +11,10 @@
 #include "server_config.h"
 #include "server_stats.h"
 
-#define INITIAL_BUFFER_SIZE 4096
 #define MAX_CREDENTIAL_SIZE 24
-#define MAX_MSG_SIZE 1024
+#define MAX_MSG_LEN 1024
+#define MAX_MSG_TO_SEND 5000
+#define IO_BUFFER_SIZE MAX_MSG_LEN * MAX_MSG_TO_SEND
 #define MAX_LOGS_DIGITS 24
 #define MAX_IO_DIGITS 24
 #define DEFAULT_LOGS_TO_SEND 100
@@ -27,10 +28,10 @@ typedef struct pctp {
 
     int client_fd;
 
-    uint8_t read_raw_buff[INITIAL_BUFFER_SIZE];
+    uint8_t read_raw_buff[IO_BUFFER_SIZE];
     buffer read_buffer;
 
-    uint8_t write_raw_buff[INITIAL_BUFFER_SIZE];
+    uint8_t write_raw_buff[IO_BUFFER_SIZE];
     buffer write_buffer;
 
     struct state_machine stm;

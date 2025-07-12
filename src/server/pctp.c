@@ -29,8 +29,8 @@ int pctp_init(const int client_fd, fd_selector selector, server_config* config, 
     pctp_data->stm.max_state = ERROR;
     pctp_data->stm.states = pctp_states;
 
-    buffer_init(&(pctp_data->read_buffer), INITIAL_BUFFER_SIZE, pctp_data->read_raw_buff);
-    buffer_init(&(pctp_data->write_buffer), INITIAL_BUFFER_SIZE, pctp_data->write_raw_buff);
+    buffer_init(&(pctp_data->read_buffer), IO_BUFFER_SIZE, pctp_data->read_raw_buff);
+    buffer_init(&(pctp_data->write_buffer), IO_BUFFER_SIZE, pctp_data->write_raw_buff);
 
     for (int c = 'a'; c <= 'z'; c++){
         parser_classes[c] |= CLASS_ALNUM;

@@ -141,6 +141,7 @@ int create_passive_tcp_socket(const char* ip_str, uint16_t port, uint32_t max_co
     char port_str[6];
     snprintf(port_str, sizeof(port_str), "%u", port);
 
+    // sure, this is blocking. But it only runs when the server starts. So apparently this is OK :).
     if (getaddrinfo(ip_str, port_str, &hints, &res) < 0)  {
         LOG(LOG_DEBUG, "Could not get the address for the IP address string");
         return -1;

@@ -30,6 +30,7 @@ typedef struct {
     uint16_t pctp_port;
     server_user users[MAX_USERS];
     int user_count;
+    uint64_t io_buffer_size;
 } server_config;
 
 /*
@@ -59,7 +60,7 @@ int admin_count(server_config* config);
 /*
  *  Crea la configuracion inicial se guarda en el stack, no hace malloc
  * */
-server_config create_config();
+server_config create_config(uint64_t initial_io_buffer_size);
 
 /*
  *  Limpia los datos internos de la configuracion

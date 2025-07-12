@@ -10,7 +10,6 @@
 #include <time.h>
 
 #define min(a, b) (((a) < (b)) ? (a) : (b))
-#define LOG_SIZE 4096
 #define CLOSED_FD_STATE -1
 
 typedef struct {

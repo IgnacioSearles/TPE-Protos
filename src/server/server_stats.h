@@ -6,7 +6,7 @@
 #include <time.h>
 
 #define MAX_HOST_LEN 100
-
+#define LOG_SIZE 4096
 
 typedef struct server_stats_cdt* server_stats;
 

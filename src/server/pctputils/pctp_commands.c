@@ -174,7 +174,7 @@ int get_logs_to_send(pctp *pctp_data) {
     int logs_to_send = 0;
     sscanf(pctp_data->logs_n, "%d", &logs_to_send);
     if (logs_to_send == 0) return DEFAULT_LOGS_TO_SEND;
-    if (logs_to_send > MAX_LOGS_TO_SEND) return MAX_LOGS_TO_SEND;
+    if (logs_to_send > LOG_SIZE) return LOG_SIZE;
     return logs_to_send;
 }
 

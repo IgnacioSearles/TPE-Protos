@@ -15,8 +15,7 @@
 #define MAX_CREDENTIAL_SIZE 24
 #define MAX_MSG_SIZE 1024
 #define MAX_LOGS_DIGITS 24
-#define MAX_LOGS_TO_SEND 100
-#define DEFAULT_LOGS_TO_SEND 10
+#define DEFAULT_LOGS_TO_SEND 100
 
 #define DEFAULT_ADMIN_USER "username"
 #define DEFAULT_ADMIN_PASS "password"

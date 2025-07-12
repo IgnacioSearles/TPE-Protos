@@ -47,14 +47,15 @@ int admin_count(server_config* config) {
     return count;
 }
 
-server_config create_config() {
+server_config create_config(uint64_t initial_io_buffer_size) {
     server_config config = {
         .socks_addr = NULL,
         .pctp_addr = NULL,
         .log_level = NULL,
         .socks_port = SOCKS5_STD_PORT,
         .pctp_port = PCTP_STD_PORT,
-        .user_count = 0
+        .user_count = 0,
+        .io_buffer_size = initial_io_buffer_size
     };
 
     return config;

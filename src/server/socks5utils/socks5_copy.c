@@ -43,11 +43,30 @@ socks5_state copy_r(struct selector_key *key) {
         
         uint8_t* read_ptr = buffer_read_ptr(&data->read_buffer, &count);
         if (count > 0) {
-            ssize_t sent = send(data->origin_fd, read_ptr, count, MSG_NOSIGNAL);
+            ssize_t sent = send(data->origin_fd, read_ptr, count, MSG_NOSIGNAL | MSG_DONTWAIT);
             if (sent > 0) {
                 log_bytes_proxied(data->stats, data->client_fd, sent);
                 buffer_read_adv(&data->read_buffer, sent);
                 LOG_A(LOG_DEBUG, "COPY_R: Forwarded %ld bytes to origin", sent);
+                size_t write_space;
+                buffer_write_ptr(&data->read_buffer, &write_space);
+                if (sent == count && write_space > 0) {
+                    uint8_t* next_ptr = buffer_write_ptr(&data->read_buffer, &write_space);
+                    ssize_t next_n = recv(key->fd, next_ptr, write_space, MSG_DONTWAIT);
+                    if (next_n > 0) {
+                        buffer_write_adv(&data->read_buffer, next_n);
+                        LOG_A(LOG_DEBUG, "COPY_R: Read additional %ld bytes", next_n);
+                        uint8_t* next_read_ptr = buffer_read_ptr(&data->read_buffer, &count);
+                        if (count > 0) {
+                            ssize_t next_sent = send(data->origin_fd, next_read_ptr, count, MSG_NOSIGNAL | MSG_DONTWAIT);
+                            if (next_sent > 0) {
+                                log_bytes_proxied(data->stats, data->client_fd, next_sent);
+                                buffer_read_adv(&data->read_buffer, next_sent);
+                                LOG_A(LOG_DEBUG, "COPY_R: Sent additional %ld bytes", next_sent);
+                            }
+                        }
+                    }
+                }
             } else if (sent < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
                 LOG_A(LOG_DEBUG, "COPY_R: Error forwarding to origin: %s", strerror(errno));
                 return ERROR;
@@ -76,7 +95,6 @@ socks5_state copy_w(struct selector_key *key) {
         ssize_t n = send(key->fd, ptr, count, MSG_NOSIGNAL | MSG_DONTWAIT);
         if (n > 0) {
             log_bytes_proxied(data->stats, data->client_fd, n);
-
             buffer_read_adv(&data->write_buffer, n);
             LOG_A(LOG_DEBUG, "COPY_W: Sent %ld bytes to client from buffer", n);
             
@@ -85,6 +103,29 @@ socks5_state copy_w(struct selector_key *key) {
             if (remaining == 0) {
                 LOG(LOG_DEBUG, "COPY_W: All buffered data sent - back to read mode");
                 selector_set_interest_key(key, OP_READ);
+                
+                // OPTIMIZACIÓN: Intentar leer inmediatamente si hay espacio
+                size_t write_space;
+                uint8_t* write_ptr = buffer_write_ptr(&data->read_buffer, &write_space);
+                if (write_space > 0) {
+                    ssize_t new_n = recv(key->fd, write_ptr, write_space, MSG_DONTWAIT);
+                    if (new_n > 0) {
+                        buffer_write_adv(&data->read_buffer, new_n);
+                        LOG_A(LOG_DEBUG, "COPY_W: OPTIMIZED - Read %ld bytes after write", new_n);
+                        
+                        // Intentar enviar inmediatamente al origen
+                        size_t forward_count;
+                        uint8_t* forward_ptr = buffer_read_ptr(&data->read_buffer, &forward_count);
+                        if (forward_count > 0) {
+                            ssize_t sent = send(data->origin_fd, forward_ptr, forward_count, MSG_NOSIGNAL | MSG_DONTWAIT);
+                            if (sent > 0) {
+                                log_bytes_proxied(data->stats, data->client_fd, sent);
+                                buffer_read_adv(&data->read_buffer, sent);
+                                LOG_A(LOG_DEBUG, "COPY_W: OPTIMIZED - Forwarded %ld bytes to origin", sent);
+                            }
+                        }
+                    }
+                }
             }
         } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
             LOG_A(LOG_DEBUG, "COPY_W: Error writing to client: %s", strerror(errno));
@@ -116,9 +157,31 @@ void origin_read(struct selector_key *key) {
             ssize_t sent = send(data->client_fd, read_ptr, count, MSG_NOSIGNAL | MSG_DONTWAIT);
             if (sent > 0) {
                 log_bytes_proxied(data->stats, data->client_fd, sent);
-
                 buffer_read_adv(&data->write_buffer, sent);
                 LOG_A(LOG_DEBUG, "ORIGIN_READ: Forwarded %ld bytes to client immediately", sent);
+                
+                // OPTIMIZACIÓN: Si enviamos todo y hay espacio, intentar leer más del origen
+                size_t write_space;
+                buffer_write_ptr(&data->write_buffer, &write_space);
+                if (sent == count && write_space > 0) {
+                    uint8_t* next_ptr = buffer_write_ptr(&data->write_buffer, &write_space);
+                    ssize_t next_n = recv(key->fd, next_ptr, write_space, MSG_DONTWAIT);
+                    if (next_n > 0) {
+                        buffer_write_adv(&data->write_buffer, next_n);
+                        LOG_A(LOG_DEBUG, "ORIGIN_READ: OPTIMIZED - Read additional %ld bytes from origin", next_n);
+                        
+                        // Intentar enviar inmediatamente al cliente
+                        uint8_t* next_read_ptr = buffer_read_ptr(&data->write_buffer, &count);
+                        if (count > 0) {
+                            ssize_t next_sent = send(data->client_fd, next_read_ptr, count, MSG_NOSIGNAL | MSG_DONTWAIT);
+                            if (next_sent > 0) {
+                                log_bytes_proxied(data->stats, data->client_fd, next_sent);
+                                buffer_read_adv(&data->write_buffer, next_sent);
+                                LOG_A(LOG_DEBUG, "ORIGIN_READ: OPTIMIZED - Sent additional %ld bytes to client", next_sent);
+                            }
+                        }
+                    }
+                }
             } else if (sent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
                 LOG(LOG_DEBUG, "ORIGIN_READ: Client not ready - data buffered for later");
                 selector_set_interest(key->s, data->client_fd, OP_WRITE);

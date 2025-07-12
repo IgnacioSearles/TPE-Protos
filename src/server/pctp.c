@@ -50,7 +50,7 @@ int pctp_init(const int client_fd, fd_selector selector, server_config* config, 
     pctp_data->add_parser = parser_init(parser_no_classes(), &add_parser_def);
     pctp_data->del_parser = parser_init(parser_classes, &del_parser_def);
     pctp_data->list_parser = parser_init(parser_no_classes(), &list_parser_def);
-    // pctp_data->config_parser = parser_init();
+    pctp_data->config_parser = parser_init(parser_classes, &config_parser_def);
     pctp_data->exit_parser = parser_init(parser_no_classes(), &exit_parser_def);
 
     stm_init(&pctp_data->stm);
@@ -70,6 +70,7 @@ int pctp_init(const int client_fd, fd_selector selector, server_config* config, 
     pctp_data->new_username_len = 0;
     pctp_data->new_password_len = 0;
     pctp_data->logs_n_len = 0;
+    pctp_data->io_config_len = 0;
     
     return 0;
 }

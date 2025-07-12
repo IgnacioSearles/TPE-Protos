@@ -7,6 +7,7 @@
 #define OK_PASS_MSG "+OK Succesfully logged in\n"
 #define OK_STATS_MSG "+OK Sending stats...\n"
 #define OK_LOGS_MSG "+OK Sending logs...\n"
+#define OK_IO_CONFIG_MSG "+OK Setting IO buffers size\n"
 #define OK_ADD_MSG "+OK Please provide new user credentials\n"
 #define OK_ADD_PASS_MSG "+OK Succesfully added user\n"
 #define OK_DEL_MSG "+OK Succesfully deleted user\n"

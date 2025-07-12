@@ -319,6 +319,113 @@ static const struct parser_definition logs_parser_def = {
     .start_state = ST_LOGS_L
 };
 
+enum config_parser_states { ST_CONFIG_C, ST_CONFIG_O1, ST_CONFIG_N, ST_CONFIG_F, ST_CONFIG_I1, ST_CONFIG_G, ST_CONFIG_SPACE, ST_CONFIG_I2, ST_CONFIG_O2, ST_CONFIG_EQUALS, ST_CONFIG_INPUT, ST_CONFIG_NL, ST_CONFIG_DONE, ST_CONFIG_ERROR};
+
+static const struct parser_state_transition config_parser_state_C_transitions[] = {
+    { .when = 'C', .dest = ST_CONFIG_O1, .act1 = ignore }, 
+    { .when = '\n', .dest = ST_CONFIG_ERROR, .act1 = set_type_error },
+    { .when = ANY, .dest = ST_CONFIG_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition config_parser_state_O1_transitions[] = {
+    { .when = 'O', .dest = ST_CONFIG_N, .act1 = ignore }, 
+    { .when = '\n', .dest = ST_CONFIG_ERROR, .act1 = set_type_error },
+    { .when = ANY, .dest = ST_CONFIG_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition config_parser_state_N_transitions[] = {
+    { .when = 'N', .dest = ST_CONFIG_F, .act1 = ignore }, 
+    { .when = '\n', .dest = ST_CONFIG_ERROR, .act1 = set_type_error },
+    { .when = ANY, .dest = ST_CONFIG_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition config_parser_state_F_transitions[] = {
+    { .when = 'F', .dest = ST_CONFIG_I1, .act1 = ignore }, 
+    { .when = '\n', .dest = ST_CONFIG_ERROR, .act1 = set_type_error },
+    { .when = ANY, .dest = ST_CONFIG_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition config_parser_state_I1_transitions[] = {
+    { .when = 'I', .dest = ST_CONFIG_G, .act1 = ignore }, 
+    { .when = '\n', .dest = ST_CONFIG_ERROR, .act1 = set_type_error },
+    { .when = ANY, .dest = ST_CONFIG_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition config_parser_state_G_transitions[] = {
+    { .when = 'G', .dest = ST_CONFIG_SPACE, .act1 = ignore }, 
+    { .when = '\n', .dest = ST_CONFIG_ERROR, .act1 = set_type_error },
+    { .when = ANY, .dest = ST_CONFIG_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition config_parser_state_SPACE_transitions[] = {
+    { .when = ' ', .dest = ST_CONFIG_I2, .act1 = ignore }, 
+    { .when = '\n', .dest = ST_CONFIG_DONE, .act1 = set_type_error }, 
+    { .when = ANY, .dest = ST_CONFIG_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition config_parser_state_I2_transitions[] = {
+    { .when = 'I', .dest = ST_CONFIG_O2, .act1 = ignore }, 
+    { .when = '\n', .dest = ST_CONFIG_DONE, .act1 = set_type_error }, 
+    { .when = ANY, .dest = ST_CONFIG_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition config_parser_state_O2_transitions[] = {
+    { .when = 'O', .dest = ST_CONFIG_EQUALS, .act1 = ignore }, 
+    { .when = '\n', .dest = ST_CONFIG_DONE, .act1 = set_type_error }, 
+    { .when = ANY, .dest = ST_CONFIG_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition config_parser_state_EQUALS_transitions[] = {
+    { .when = '=', .dest = ST_CONFIG_INPUT, .act1 = ignore },
+    { .when = '\r', .dest = ST_LOGS_NL, .act1 = ignore }, 
+    { .when = ANY, .dest = ST_CONFIG_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition config_parser_state_INPUT_transitions[] = {
+    { .when = '\r', .dest = ST_CONFIG_NL, .act1 = ignore }, 
+    { .when = '\n', .dest = ST_CONFIG_DONE, .act1 = set_type_success }, 
+    { .when = CLASS_NUM, .dest = ST_CONFIG_INPUT, .act1 = set_type_input },
+    { .when = ANY, .dest = ST_CONFIG_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition config_parser_state_NL_transitions[] = {
+    { .when = '\n', .dest = ST_CONFIG_DONE, .act1 = set_type_success }, 
+    { .when = ANY, .dest = ST_CONFIG_ERROR, .act1 = ignore }
+};
+
+static const struct parser_state_transition config_parser_state_DONE_transitions[] = {0};
+
+static const struct parser_state_transition config_parser_state_ERROR_transitions[] = {
+    { .when = '\n', .dest = ST_CONFIG_ERROR, .act1 = set_type_error }, 
+    { .when = ANY, .dest = ST_CONFIG_ERROR, .act1 = ignore }
+};
+
+static const size_t config_parser_states_n[] = {3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 2, 0, 2};
+
+static const struct parser_state_transition* config_parser_state_transitions[] = {
+    config_parser_state_C_transitions,
+    config_parser_state_O1_transitions,
+    config_parser_state_N_transitions,
+    config_parser_state_F_transitions,
+    config_parser_state_I1_transitions,
+    config_parser_state_G_transitions,
+    config_parser_state_SPACE_transitions,
+    config_parser_state_I2_transitions,
+    config_parser_state_O2_transitions,
+    config_parser_state_EQUALS_transitions,
+    config_parser_state_INPUT_transitions,
+    config_parser_state_NL_transitions,
+    config_parser_state_DONE_transitions,
+    config_parser_state_ERROR_transitions,
+};
+
+static const struct parser_definition config_parser_def = {
+    .states_count = ST_CONFIG_ERROR,
+    .states = config_parser_state_transitions,
+    .states_n = config_parser_states_n,
+    .start_state = ST_CONFIG_C
+};
+
 enum add_parser_states { ST_ADD_A1, ST_ADD_D1, ST_ADD_D2, ST_ADD_SPACE, 
                          ST_ADD_B_A3, ST_ADD_A2, ST_ADD_S, ST_ADD_I1, ST_ADD_C,
                                       ST_ADD_D3, ST_ADD_M, ST_ADD_I2, ST_ADD_N,

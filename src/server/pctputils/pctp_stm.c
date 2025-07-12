@@ -58,7 +58,6 @@ const struct state_definition pctp_states[] = {
     { .state = ADD_USER_ERROR_WRITE,        .on_arrival = selector_set_interest_write, .on_write_ready = add_user_error_write, .on_departure = reset_new_user_state },
     { .state = ADD_PASS_READ,               .on_arrival = selector_set_interest_read, .on_read_ready = add_pass_read },
     { .state = ADD_PASS_ERROR_WRITE,        .on_arrival = selector_set_interest_write, .on_write_ready = add_pass_error_write, .on_departure = reset_new_pass_state },
-    // { .state = CONFIG, },
     { .state = EXIT_WRITE,                  .on_arrival = selector_set_interest_write, .on_write_ready = exit_write, .on_departure = reset_main_state },
     { .state = DONE,                        .on_arrival = on_close },
     { .state = ERROR,                       .on_arrival = on_close },

@@ -15,6 +15,7 @@
 #define MAX_CREDENTIAL_SIZE 24
 #define MAX_MSG_SIZE 1024
 #define MAX_LOGS_DIGITS 24
+#define MAX_IO_DIGITS 24
 #define DEFAULT_LOGS_TO_SEND 100
 
 #define DEFAULT_ADMIN_USER "username"
@@ -43,7 +44,7 @@ typedef struct pctp {
     struct parser *add_parser;
     struct parser *del_parser;
     struct parser *list_parser;
-    // struct parser *config_parser;
+    struct parser *config_parser;
     struct parser *exit_parser;
 
     int id;
@@ -65,6 +66,9 @@ typedef struct pctp {
 
     char logs_n[MAX_LOGS_DIGITS+1];
     int logs_n_len;
+    
+    char io_config[MAX_IO_DIGITS+1];
+    int io_config_len;
 } pctp;
 
 int pctp_init(const int client_fd, fd_selector s, server_config* config, server_stats stats);

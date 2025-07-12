@@ -13,11 +13,13 @@ unsigned exit_write(struct selector_key *key);
 
 void reset_main_state(const unsigned state, struct selector_key *key);
 void reset_logs_state(const unsigned state, struct selector_key *key);
+void reset_config_state(const unsigned state, struct selector_key *key);
 void reset_del_state(const unsigned state, struct selector_key *key);
 
 void write_stats_to_buffer(buffer* write_buffer, server_stats stats);
 void write_n_logs_to_buffer(buffer* write_buffer, server_stats stats, int logs_to_send);
 void write_users_to_buffer(buffer* write_buffer, server_config* config);
 int get_logs_to_send(pctp *pctp_data);
+int get_io_config(pctp *pctp_data);
 
 #endif

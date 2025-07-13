@@ -74,5 +74,7 @@ STATS                # Estadísticas de uso del proxy
 ADD ADMIN            # Agrega un nuevo usuario ADMIN (debe ser seguido de los comandos de login con los datos del nuevo usuario)
 ADD BASIC            # Agrega un nuevo usuario BASIC (debe ser seguido de los comandos de login con los datos del nuevo usuario)
 DEL [nombre_usuario] # Borra el usuario con [nombre_usuario]
+LIST                 # Lista los usuarios registrados
+CONFIG IO=[BYTES]    # Asigna tamaño a los buffers de IO
 EXIT                 # Cierra la sesión
 ```

@@ -115,10 +115,10 @@ int socks5_init(const int client_fd, fd_selector s, server_config* config, serve
     return 0;
 }
 
-static bool is_write_state(const socks5_state state) {
+static bool is_write_state(const socks5_state state, socks5* socks) {
     return (state == HELLO_WRITE || state == AUTH_WRITE || 
             state == REQUEST_WRITE || state == CONNECTING_RESPONSE
-            || state == COPY);
+            || (state == COPY && buffer_can_read(&socks->write_buffer)));
 }
 
 static bool is_read_state(const socks5_state state) {
@@ -126,10 +126,10 @@ static bool is_read_state(const socks5_state state) {
             state == REQUEST_READ || state == COPY);
 }
 
-static void set_interest_for_state(socks5_state next_state, fd_selector selector, int fd) {
+static void set_interest_for_state(socks5_state next_state, fd_selector selector, int fd, socks5* socks) {
     fd_interest interest = OP_NOOP; 
 
-    interest |= is_write_state(next_state) ? OP_WRITE : OP_NOOP; 
+    interest |= is_write_state(next_state, socks) ? OP_WRITE : OP_NOOP; 
     interest |= is_read_state(next_state) ? OP_READ : OP_NOOP;
 
     if (interest != OP_NOOP) {
@@ -148,7 +148,7 @@ static void socks5_read(struct selector_key *key) {
         LOG_A(LOG_DEBUG, "SOCKS5: Terminating connection (state=%d)", next);
         selector_unregister_fd(key->s, socks->client_fd);
     } else {
-        set_interest_for_state(next, key->s, socks->client_fd); 
+        set_interest_for_state(next, key->s, socks->client_fd, socks); 
     }
 }
 
@@ -162,7 +162,7 @@ static void socks5_write(struct selector_key *key) {
         LOG_A(LOG_DEBUG, "SOCKS5: Terminating connection (state=%d)", next);
         selector_unregister_fd(key->s, key->fd);
     } else {
-        set_interest_for_state(next, key->s, socks->client_fd); 
+        set_interest_for_state(next, key->s, socks->client_fd, socks); 
     }
 }
 
@@ -176,7 +176,7 @@ static void socks5_unblock(struct selector_key *key) {
         LOG_A(LOG_DEBUG, "SOCKS5: Terminating connection (state=%d)", next);
         selector_unregister_fd(key->s, key->fd);
     } else {
-        set_interest_for_state(next, key->s, socks->client_fd); 
+        set_interest_for_state(next, key->s, socks->client_fd, socks); 
     }
 }
 

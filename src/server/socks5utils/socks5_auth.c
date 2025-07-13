@@ -30,20 +30,17 @@ socks5_state auth_read(struct selector_key *key) {
                 LOG_A(LOG_DEBUG, "AUTH_READ: Parsed - user='%s'", result.username);
         
                 bool auth_ok = false;
-                if (data->config) {
-                    bool found = false;
-                    for (int i = 0; i < data->config->user_count && !found; i++) {
-                        server_user user = data->config->users[i];
-                        if (strcmp(user.user, result.username) == 0 && 
+                for (int i = 0; i < data->config->user_count; i++) {
+                    server_user user = data->config->users[i];
+                    if (strcmp(user.user, result.username) == 0 && 
                             strcmp(user.pass, result.password) == 0) {
-                            log_user_authenticated(data->stats, data->client_fd, user.user);
-                            auth_ok = true;
-                            LOG_A(LOG_DEBUG, "AUTH_READ: Credentials match user[%d]", i);
-                            found = true;
-                        }
+                        log_user_authenticated(data->stats, data->client_fd, user.user);
+                        auth_ok = true;
+                        LOG_A(LOG_DEBUG, "AUTH_READ: Credentials match user[%d]", i);
+                        break;
                     }
                 }
-                
+
                 LOG_A(LOG_DEBUG, "AUTH_READ: Authentication %s", auth_ok ? "SUCCESS" : "FAILED");
                 
                 size_t consumed = 2 + strlen(result.username) + 1 + strlen(result.password);

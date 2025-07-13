@@ -1,4 +1,5 @@
-#include "selector.h"
+#include <selector.h>
+#include "buffer.h"
 #include "stm.h"
 #include <logger.h>
 #include <socks5.h>
@@ -116,12 +117,25 @@ int socks5_init(const int client_fd, fd_selector s, server_config* config, serve
 
 static bool is_write_state(const socks5_state state) {
     return (state == HELLO_WRITE || state == AUTH_WRITE || 
-            state == REQUEST_WRITE || state == CONNECTING_RESPONSE);
+            state == REQUEST_WRITE || state == CONNECTING_RESPONSE
+            || state == COPY);
 }
 
 static bool is_read_state(const socks5_state state) {
     return (state == HELLO_READ || state == AUTH_READ || 
             state == REQUEST_READ || state == COPY);
+}
+
+static void set_interest_for_state(socks5_state next_state, fd_selector selector, int fd) {
+    fd_interest interest = OP_NOOP; 
+
+    interest |= is_write_state(next_state) ? OP_WRITE : OP_NOOP; 
+    interest |= is_read_state(next_state) ? OP_READ : OP_NOOP;
+
+    if (interest != OP_NOOP) {
+        LOG_A(LOG_DEBUG, "SOCKS5: Changing selector interest to %d for fd = %d", interest, fd);
+        selector_set_interest(selector, fd, interest);
+    }
 }
 
 static void socks5_read(struct selector_key *key) {
@@ -134,20 +148,7 @@ static void socks5_read(struct selector_key *key) {
         LOG_A(LOG_DEBUG, "SOCKS5: Terminating connection (state=%d)", next);
         selector_unregister_fd(key->s, socks->client_fd);
     } else {
-        fd_interest interest = OP_NOOP;
-        
-        if (next == COPY) {
-            interest = OP_READ | OP_WRITE;
-        } else if (is_write_state(next)) {
-            interest = OP_WRITE;
-        } else if (is_read_state(next)) {
-            interest = OP_READ;
-        }
-        
-        if (interest != OP_NOOP) {
-            LOG_A(LOG_DEBUG, "SOCKS5: Changing selector interest to %d", interest);
-            selector_set_interest(key->s, socks->client_fd, interest);
-        }
+        set_interest_for_state(next, key->s, socks->client_fd); 
     }
 }
 
@@ -161,20 +162,7 @@ static void socks5_write(struct selector_key *key) {
         LOG_A(LOG_DEBUG, "SOCKS5: Terminating connection (state=%d)", next);
         selector_unregister_fd(key->s, key->fd);
     } else {
-        fd_interest interest = OP_NOOP;
-        
-        if (next == COPY) {
-            interest = OP_READ | OP_WRITE;
-        } else if (is_read_state(next)) {
-            interest = OP_READ;
-        } else if (is_write_state(next)) {
-            interest = OP_WRITE;
-        }
-
-        if (interest != OP_NOOP) {
-            LOG_A(LOG_DEBUG, "SOCKS5: Changing selector interest to %d", interest);
-            selector_set_interest(key->s, socks->client_fd, interest);
-        }
+        set_interest_for_state(next, key->s, socks->client_fd); 
     }
 }
 
@@ -188,17 +176,7 @@ static void socks5_unblock(struct selector_key *key) {
         LOG_A(LOG_DEBUG, "SOCKS5: Terminating connection (state=%d)", next);
         selector_unregister_fd(key->s, key->fd);
     } else {
-        fd_interest interest = OP_NOOP;
-        if (is_read_state(next)) {
-            interest = OP_READ;
-        } else if (is_write_state(next)) {
-            interest = OP_WRITE;
-        }
-
-        if (interest != OP_NOOP) {
-            LOG_A(LOG_DEBUG, "SOCKS5: Changing selector interest to %d", interest);
-            selector_set_interest(key->s, socks->client_fd, interest);
-        }
+        set_interest_for_state(next, key->s, socks->client_fd); 
     }
 }
 

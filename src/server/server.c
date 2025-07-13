@@ -74,6 +74,10 @@ int main(int argc, char** argv) {
         return 0;
     }
 
+    if (admin_count(&config) == 0) {
+        add_user(&config, DEFAULT_ADMIN_USER, DEFAULT_ADMIN_PASS, ADMIN);
+    }
+
     logger_set_level(config.log_level);
 
     signal(SIGINT, handle_shutdown);  // Ctrl+C

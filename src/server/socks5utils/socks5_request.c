@@ -16,9 +16,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-
-uint8_t get_reply_code() {
-    switch (errno) {
+uint8_t get_reply_code(int err) {
+    switch (err) {
         case ECONNREFUSED:
             return SOCKS5_REP_CONNECTION_REFUSED;
         case ENETUNREACH:
@@ -59,9 +58,14 @@ socks5_state connecting_response(struct selector_key *key) {
 socks5_state connecting(struct selector_key *key) {
     struct socks5* data = ATTACHMENT(key);
 
-    LOG(LOG_DEBUG, "CONNECTING: Got address info, now trying to connect");
+    if (data->res == NULL) {
+        LOG(LOG_DEBUG, "CONNECTING: address info was null");
+        data->reply_code = SOCKS5_REP_HOST_UNREACH;
+        return REQUEST_WRITE;
+    }
 
-    data->reply_code = SOCKS5_REP_HOST_UNREACH;
+    int last_errno = 0;
+    LOG(LOG_DEBUG, "CONNECTING: Got address info, now trying to connect");
 
     for (struct addrinfo* rp = data->res; rp != NULL; rp = rp->ai_next) {
         int sock = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
@@ -76,7 +80,7 @@ socks5_state connecting(struct selector_key *key) {
                 data->res = rp->ai_next;
 
                 if (selector_register(key->s, sock, &socks5_handler, OP_WRITE, key->data) != SELECTOR_SUCCESS) {
-                    LOG(LOG_DEBUG, "CONNECTING: Could not register fd");
+                    LOG(LOG_WARN, "CONNECTING: Could not register fd");
                     close(sock);
                     data->reply_code = SOCKS5_REP_GENERAL_FAILURE;
                     continue;
@@ -84,14 +88,15 @@ socks5_state connecting(struct selector_key *key) {
 
                 return AWAITING_CONNECTION;
             } else {
+                last_errno = errno;
                 LOG(LOG_DEBUG, "CONNECTING: Could not connect with address info");
-                data->reply_code = get_reply_code();
                 close(sock);
             }
         } else {
             LOG(LOG_DEBUG, "CONNECTING: Didn't have to wait to connect");
             data->origin_fd = sock;
             freeaddrinfo(data->res);
+            data->res = NULL;
             return CONNECTING_RESPONSE;
         }
     }
@@ -99,6 +104,7 @@ socks5_state connecting(struct selector_key *key) {
     LOG(LOG_DEBUG, "CONNECTING: could not connect to host");
     freeaddrinfo(data->res);
     data->res = NULL;
+    data->reply_code = get_reply_code(last_errno);
 
     return REQUEST_WRITE;
 }

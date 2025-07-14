@@ -67,7 +67,7 @@ parse_server_params_status parse_server_params(int argc, char **argv,
             }
 
             sep[0] = '\0';
-            add_user(config, optarg, &sep[1], ADMIN);
+            add_user(config, copy_str(optarg), copy_str(&sep[1]), ADMIN);
 
             break;
         case 'd':

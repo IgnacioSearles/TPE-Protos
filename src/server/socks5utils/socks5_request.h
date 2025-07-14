@@ -23,6 +23,9 @@ socks5_state request_read(struct selector_key *key);
 /** Envío de respuesta inicial a solicitud */
 socks5_state request_write(struct selector_key *key);
 
+/** Maneja la obtención del address info */
+socks5_state on_got_address_info(struct selector_key *key);
+
 /** Establecimiento de conexión con destino */
 socks5_state connecting(struct selector_key *key);
 

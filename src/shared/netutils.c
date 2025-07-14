@@ -212,11 +212,9 @@ void* getaddrinfo_in_other_thread(void* data) {
 
     if (getaddrinfo(addr_info_args->host, addr_info_args->port, &hints, addr_info_args->out) != 0) {
         LOG(LOG_DEBUG, "Could not get address info");
-        selector_notify_block(addr_info_args->selector, addr_info_args->notify_fd);
-        return NULL;
+    } else {
+        LOG(LOG_DEBUG, "Got address info in another thread, merging to main");
     }
-
-    LOG(LOG_DEBUG, "Got address info in another thread, merging to main");
 
     fd_selector selector = addr_info_args->selector;
     int notify_fd = addr_info_args->notify_fd;
@@ -248,6 +246,7 @@ int get_addr_info_non_blocking(const char* host, const char *port, fd_selector s
         LOG(LOG_DEBUG, "Could not create connect thread");
         return -1;
     } 
+    pthread_detach(tid);
     
     return 0;
 }

@@ -1,4 +1,5 @@
 #include "pctp_stm.h"
+#include "parser.h"
 #include "pctp_auth.h"
 #include "pctp_commands.h"
 #include "pctp_users.h"
@@ -27,18 +28,30 @@ void pctp_write(struct selector_key *key) {
 }
 
 void pctp_close(struct selector_key *key) {
-    pctp *pctp_data = key->data;
-    stm_handler_close(&pctp_data->stm, key);
+    pctp* pctp_data = key->data;
+
+    parser_destroy(pctp_data->user_parser);
+    parser_destroy(pctp_data->pass_parser);
+    parser_destroy(pctp_data->stats_parser);
+    parser_destroy(pctp_data->logs_parser);
+    parser_destroy(pctp_data->add_parser);
+    parser_destroy(pctp_data->del_parser);
+    parser_destroy(pctp_data->list_parser);
+    parser_destroy(pctp_data->config_parser);
+    parser_destroy(pctp_data->exit_parser);
+
+    free(pctp_data);
+    LOG(LOG_DEBUG, "Closed PCTP session.");
+
 }
 
 void on_close(const unsigned state, struct selector_key *key) {
     pctp* pctp_data = key->data;
+
     if (pctp_data->client_fd >= 0) {
         close(pctp_data->client_fd);
         selector_unregister_fd(key->s, pctp_data->client_fd);
     }
-    free(pctp_data);
-    LOG(LOG_DEBUG, "Closed PCTP session.");
 }
 
 const struct state_definition pctp_states[] = {

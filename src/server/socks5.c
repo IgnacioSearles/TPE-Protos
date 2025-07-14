@@ -35,7 +35,7 @@ static const struct state_definition client_statbl[] = {
     { .state = AUTH_WRITE,    .on_write_ready = auth_write    },  
     { .state = REQUEST_READ,  .on_read_ready  = request_read  },
     { .state = REQUEST_WRITE, .on_write_ready = request_write },
-    { .state = CONNECTING,    .on_block_ready = connecting    },
+    { .state = CONNECTING,    .on_block_ready = on_got_address_info   },
     { .state = AWAITING_CONNECTION, .on_write_ready = connecting_response },
     { .state = CONNECTING_RESPONSE, .on_write_ready = connected  }, 
     { .state = COPY,          .on_arrival     = copy_on_arrival,

@@ -126,6 +126,9 @@ typedef struct socks5 {
 
     /** Resultado de resolución de nombres */
     struct addrinfo *res;
+
+    /** Inicio al resultado de resolución de nombres */
+    struct addrinfo *start_res;
 } socks5;
 
 /**

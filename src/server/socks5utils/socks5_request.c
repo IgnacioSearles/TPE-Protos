@@ -55,14 +55,22 @@ socks5_state connecting_response(struct selector_key *key) {
     return ERROR;
 }
 
-socks5_state connecting(struct selector_key *key) {
+socks5_state on_got_address_info(struct selector_key *key) {
     struct socks5* data = ATTACHMENT(key);
 
-    if (data->res == NULL) {
+    if (data->start_res == NULL) {
         LOG(LOG_DEBUG, "CONNECTING: address info was null");
         data->reply_code = SOCKS5_REP_HOST_UNREACH;
         return REQUEST_WRITE;
     }
+
+    data->res = data->start_res;
+
+    return connecting(key);
+}
+
+socks5_state connecting(struct selector_key *key) {
+    struct socks5* data = ATTACHMENT(key);
 
     int last_errno = 0;
     LOG(LOG_DEBUG, "CONNECTING: Got address info, now trying to connect");
@@ -95,14 +103,14 @@ socks5_state connecting(struct selector_key *key) {
         } else {
             LOG(LOG_DEBUG, "CONNECTING: Didn't have to wait to connect");
             data->origin_fd = sock;
-            freeaddrinfo(data->res);
+            freeaddrinfo(data->start_res);
             data->res = NULL;
             return CONNECTING_RESPONSE;
         }
     }
 
     LOG(LOG_DEBUG, "CONNECTING: could not connect to host");
-    freeaddrinfo(data->res);
+    freeaddrinfo(data->start_res);
     data->res = NULL;
     data->reply_code = get_reply_code(last_errno);
 
@@ -153,7 +161,7 @@ socks5_state request_read(struct selector_key *key) {
                 snprintf(port_str, sizeof(port_str), "%d", data->target_port);
 
                 selector_set_interest(key->s, data->client_fd, OP_NOOP);
-                get_addr_info_non_blocking(data->target_host, port_str, key->s, data->client_fd, &data->res);
+                get_addr_info_non_blocking(data->target_host, port_str, key->s, data->client_fd, &data->start_res);
                 return CONNECTING;
             } else if (!result.valid) {
                 LOG(LOG_DEBUG, "REQUEST_READ: INVALID request - terminating");
@@ -180,6 +188,8 @@ socks5_state request_read(struct selector_key *key) {
 
 socks5_state connected(struct selector_key *key) {
     struct socks5* data = ATTACHMENT(key);
+
+    freeaddrinfo(data->start_res);
 
     LOG(LOG_DEBUG, "CONNECTED: Connected to server");
     log_client_connected_to_destination_server(data->stats, data->client_fd, data->target_host, data->target_port);

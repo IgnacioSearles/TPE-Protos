@@ -32,6 +32,8 @@ int del_user(server_config* config, char* user_to_del, int name_len) {
             break;
     }
     if (i == config->user_count) return -1;
+    free(config->users[i].user);
+    free(config->users[i].pass);
     config->user_count--;
     for (; i<config->user_count; i++) config->users[i] = config->users[i+1];
     return 0;
@@ -72,5 +74,10 @@ void destroy_config(server_config* config) {
 
     if (config->log_level != NULL) {
         free(config->log_level);
+    }
+
+    for (int i = 0; i < config->user_count; i++) {
+        free(config->users[i].user);
+        free(config->users[i].pass);
     }
 }

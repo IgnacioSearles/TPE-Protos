@@ -30,17 +30,6 @@ unsigned add_user_read(struct selector_key *key) {
     pctp *pctp_data = key->data;
     buffer* read_buffer = &pctp_data->read_buffer;
 
-    size_t available = 0;
-    uint8_t* ptr = buffer_write_ptr(read_buffer, &available);
-    ssize_t n = recv(pctp_data->client_fd, ptr, available, MSG_NOSIGNAL);
-    if (n <= 0) {
-        return ADD_USER_READ;
-    }
-
-    buffer_write_adv(read_buffer, n);
-
-    LOG_A(LOG_DEBUG, "Received %ld bytes in ADD_USER_READ", n);
-
     while (buffer_can_read(read_buffer)) {
         uint8_t c = buffer_read(read_buffer);
         const struct parser_event* e = parser_feed(pctp_data->user_parser, c);
@@ -68,6 +57,7 @@ unsigned add_user_read(struct selector_key *key) {
         }
     }
 
+    selector_set_interest_key(key, OP_READ);
     return ADD_USER_READ;
 }
 
@@ -114,17 +104,6 @@ unsigned add_pass_read(struct selector_key *key) {
     pctp *pctp_data = key->data;
     buffer* read_buffer = &pctp_data->read_buffer;
 
-    size_t available = 0;
-    uint8_t* ptr = buffer_write_ptr(read_buffer, &available);
-    ssize_t n = recv(pctp_data->client_fd, ptr, available, MSG_NOSIGNAL);
-    if (n <= 0) {
-        return ADD_PASS_READ;
-    }
-
-    buffer_write_adv(read_buffer, n);
-
-    LOG_A(LOG_DEBUG, "Received %ld bytes in ADD_PASS_READ", n);
-
     while (buffer_can_read(read_buffer)) {
         uint8_t c = buffer_read(read_buffer);
         const struct parser_event* e = parser_feed(pctp_data->pass_parser, c);
@@ -163,6 +142,7 @@ unsigned add_pass_read(struct selector_key *key) {
         }
     }
 
+    selector_set_interest_key(key, OP_READ);
     return ADD_PASS_READ;
 }
 

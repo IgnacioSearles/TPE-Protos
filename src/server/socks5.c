@@ -39,8 +39,8 @@ static const struct state_definition client_statbl[] = {
     { .state = AWAITING_CONNECTION, .on_write_ready = connecting_response },
     { .state = CONNECTING_RESPONSE, .on_write_ready = connected  }, 
     { .state = COPY,          .on_arrival     = copy_on_arrival,
-                              .on_read_ready  = copy_bidirectional,         // Cliente → Servidor remoto
-                              .on_write_ready = copy_bidirectional          }, // Buffer → Cliente
+                              .on_read_ready  = copy_read,         // Cliente → Servidor remoto
+                              .on_write_ready = copy_write          }, // Buffer → Cliente
     { .state = DONE   },
     { .state = ERROR  }
 };

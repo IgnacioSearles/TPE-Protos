@@ -29,7 +29,7 @@ void copy_on_arrival(const unsigned state, struct selector_key *key) {
     }
 }
 
-socks5_state copy_bidirectional(struct selector_key *key) {
+socks5_state copy_read(struct selector_key *key) {
     struct socks5* data = ATTACHMENT(key);
     
     size_t read_count;
@@ -49,6 +49,12 @@ socks5_state copy_bidirectional(struct selector_key *key) {
             return ERROR;
         }
     }
+    
+    return COPY;
+}
+
+socks5_state copy_write(struct selector_key *key) {
+    struct socks5* data = ATTACHMENT(key);
     
     size_t write_count;
     uint8_t* write_ptr = buffer_read_ptr(&data->write_buffer, &write_count);

@@ -1,12 +1,26 @@
 #ifndef PCTP_PARSER_TABLES_H
 #define PCTP_PARSER_TABLES_H
+
+/**
+ * pctp_parser_tables.h - Tablas de parseo para comandos PCTP
+ *
+ * Define las tablas de estados y transiciones para el parser automático
+ * de comandos PCTP. Utiliza clases de caracteres y acciones para
+ * procesar de forma eficiente los comandos de texto del protocolo.
+ *
+ * Comandos soportados: USER, PASS, STATS, LOGS, ADD, DEL, LIST, CONFIG, EXIT
+ */
+
 #include "../shared/parser.h"
 
+/** Clases de caracteres para el parser */
 #define CLASS_ALNUM (1 << 8)
 #define CLASS_NUM (1 << 10)
 
+/** Tipos de eventos del parser */
 enum type { TYPE_UNDEFINED, TYPE_SUCCESS, TYPE_ERROR, TYPE_INPUT, TYPE_BASIC, TYPE_ADMIN };
 
+/** Acciones del parser */
 static void set_type_success(struct parser_event* ret, const uint8_t c) {
     ret->type = TYPE_SUCCESS;
 }

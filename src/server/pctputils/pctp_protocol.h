@@ -22,13 +22,13 @@
 
 /** Mensajes de respuesta exitosa del protocolo */
 #define OK_USER_MSG "+OK Please send password\n"
-#define OK_PASS_MSG "+OK Succesfully logged in\n"
+#define OK_PASS_MSG "+OK Successfully logged in\n"
 #define OK_STATS_MSG "+OK Sending stats...\n"
 #define OK_LOGS_MSG "+OK Sending logs...\n"
 #define OK_IO_CONFIG_MSG "+OK Setting IO buffers size\n"
 #define OK_ADD_MSG "+OK Please provide new user credentials\n"
-#define OK_ADD_PASS_MSG "+OK Succesfully added user\n"
-#define OK_DEL_MSG "+OK Succesfully deleted user\n"
+#define OK_ADD_PASS_MSG "+OK Successfully added user\n"
+#define OK_DEL_MSG "+OK Successfully deleted user\n"
 #define OK_LIST_MSG "+OK Sending user list...\n"
 #define OK_DONE_MSG "+OK Done\n"
 

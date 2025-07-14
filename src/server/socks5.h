@@ -15,9 +15,8 @@
  * múltiples conexiones concurrentes sin bloqueo. Cada conexión pasa por
  * los siguientes estados principales:
  *  - HELLO: negociación inicial y selección de método de autenticación
- *  - AUTH: autenticación usuario/contraseña si es requerida
+ *  - AUTH: autenticación usuario/contraseña
  *  - REQUEST: procesamiento de la solicitud de conexión
- *  - RESOLV: resolución asíncrona de nombres (si es necesaria)
  *  - CONNECTING: establecimiento de conexión con el destino
  *  - COPY: transferencia bidireccional de datos
  *

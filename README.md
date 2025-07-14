@@ -78,3 +78,58 @@ LIST                 # Lista los usuarios registrados
 CONFIG IO=[BYTES]    # Asigna tamaño a los buffers de IO
 EXIT                 # Cierra la sesión
 ```
+## 📚 Documentación y Estructura del Proyecto
+
+### 📁 Estructura de Directorios
+
+```
+TPE-Protos/
+├── 📋 Informe del desarrollo - Trabajo Practico Especial - Grupo 10.pdf
+├── 📦 bin/                    # Ejecutables generados
+│   ├── socks5d               # Servidor SOCKS5 con PCTP
+│   └── client                # Cliente PCTP para administración
+├── 🔧 src/                   # Código fuente completo
+│   ├── client/               # Código del cliente PCTP
+│   ├── server/               # Código del servidor principal
+│   │   ├── socks5utils/      # Módulos del protocolo SOCKS5
+│   │   ├── pctputils/        # Módulos del protocolo PCTP
+│   │   ├── socks5.c/.h       # Controlador principal SOCKS5
+│   │   ├── pctp.c/.h         # Controlador principal PCTP
+│   │   └── server.c          # Punto de entrada del servidor
+│   └── shared/               # Utilidades compartidas
+│       ├── selector.c/.h     # Multiplexor I/O
+│       ├── stm.c/.h          # Motor de máquinas de estado
+│       ├── buffer.c/.h       # Buffers circulares
+│       ├── parser.c/.h       # Parsers automáticos
+│       └── logger.c/.h       # Sistema de logging
+├── 📊 obj/                   # Archivos objeto (.o)
+├── 🔨 Makefile              # Sistema de compilación
+└── 📖 README.md             # Esta documentación
+```
+
+### 📄 Documentación Disponible
+
+**📋 Informe Técnico**
+- **Ubicación**: `Informe del desarrollo - Trabajo Practico Especial - Grupo 10.pdf`
+- **Contenido**: Análisis técnico detallado, decisiones de diseño, testing y optimizaciones
+
+**💻 Código Fuente**
+- **Ubicación**: Directorio `src/`
+- **Headers documentados**: Todos los archivos `.h` incluyen documentación
+- **Arquitectura modular**: Separación clara entre SOCKS5, PCTP y utilidades
+
+**🔧 Ejecutables**
+- **Servidor**: `bin/socks5d` - Servidor principal con ambos protocolos
+- **Cliente**: `bin/client` - Cliente administrativo PCTP
+- **Generación**: Se crean automáticamente con `make all`
+
+### 🔍 Elementos Solicitados
+
+| Elemento | Ubicación | Descripción |
+|----------|-----------|-------------|
+| **Servidor SOCKS5** | `bin/socks5d` | Ejecutable principal del servidor |
+| **Cliente PCTP** | `bin/client` | Cliente para administración remota |
+| **Código fuente** | `src/` | Implementación completa modularizada |
+| **Informe técnico** | `Informe del desarrollo...pdf` | Documentación académica detallada |
+| **Documentación API** | `src/**/*.h` | Headers documentados |
+| **Arquitectura** | `README.md` (este archivo) | Diagramas y explicación del sistema |

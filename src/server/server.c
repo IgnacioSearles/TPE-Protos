@@ -92,6 +92,7 @@ int main(int argc, char** argv) {
     int socks5_socket = create_passive_tcp_socket(config.socks_addr, config.socks_port, MAX_SOCKS5_CONNECTIONS); 
     if (socks5_socket < 0) {
         LOG(LOG_ERROR, "server error: failed to create SOCKS5 socket");
+        destroy_server_stats(socks5_server_stats);
         destroy_config(&config);
         return EXIT_FAILURE;
     }
@@ -100,6 +101,7 @@ int main(int argc, char** argv) {
     if (pctp_socket < 0) {
         LOG(LOG_ERROR, "server error: failed to create PCTP socket");
         close(socks5_socket);
+        destroy_server_stats(socks5_server_stats);
         destroy_config(&config);
         return EXIT_FAILURE;
     }
@@ -116,6 +118,7 @@ int main(int argc, char** argv) {
         LOG(LOG_ERROR, "server error: could no init selector library");
         close(socks5_socket);
         close(pctp_socket);
+        destroy_server_stats(socks5_server_stats);
         destroy_config(&config);
         return EXIT_FAILURE;
     }
@@ -125,6 +128,7 @@ int main(int argc, char** argv) {
         LOG(LOG_ERROR, "server errror: could no initialize selector");
         close(socks5_socket);
         close(pctp_socket);
+        destroy_server_stats(socks5_server_stats);
         destroy_config(&config);
         return EXIT_FAILURE;
     }
@@ -137,6 +141,7 @@ int main(int argc, char** argv) {
         close(socks5_socket);
         close(pctp_socket);
         selector_destroy(selector);
+        destroy_server_stats(socks5_server_stats);
         destroy_config(&config);
         return EXIT_FAILURE;
     }
@@ -149,6 +154,7 @@ int main(int argc, char** argv) {
         close(socks5_socket);
         close(pctp_socket);
         selector_destroy(selector);
+        destroy_server_stats(socks5_server_stats);
         destroy_config(&config);
         return EXIT_FAILURE;
     }

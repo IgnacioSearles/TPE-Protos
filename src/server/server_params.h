@@ -3,6 +3,8 @@
 
 #include "server_config.h"
 
+#define MIN_PORT 1024
+
 typedef enum {
     PARAMS_SUCCESS,
     PARAMS_SHOULD_EXIT,

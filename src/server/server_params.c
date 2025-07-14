@@ -50,9 +50,21 @@ parse_server_params_status parse_server_params(int argc, char **argv,
             break;
         case 'p':
             config->socks_port = atoi(optarg);
+
+            if (config->socks_port < MIN_PORT) {
+                LOG_A(LOG_ERROR, "Invalid SOCKS port number %d", config->socks_port);
+                return PARAMS_ERROR;
+            }
+
             break;
         case 'P':
             config->pctp_port = atoi(optarg);
+
+            if (config->pctp_port < MIN_PORT) {
+                LOG_A(LOG_ERROR, "Invalid PCTP port number %d", config->socks_port);
+                return PARAMS_ERROR;
+            }
+
             break;
         case 'u':
             if (config->user_count >= MAX_INITIAL_USERS) {

@@ -50,6 +50,9 @@ socks5_state auth_read(struct selector_key *key) {
                 return AUTH_WRITE;
             }
         }
+    } else if (n == 0) {
+        LOG(LOG_DEBUG, "AUTH_READ: Client disconnected during authentication");
+        return DONE;
     } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
         LOG_A(LOG_DEBUG, "AUTH_READ: Error reading: %s", strerror(errno));
         return ERROR;

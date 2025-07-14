@@ -37,6 +37,9 @@ socks5_state hello_read(struct selector_key *key) {
                 return HELLO_WRITE;
             }
         }
+    } else if (n == 0) {
+        LOG(LOG_DEBUG, "HELLO_READ: Client disconnected during handshake");
+        return DONE;
     } else if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) {
         LOG_A(LOG_DEBUG, "HELLO_READ: Error reading: %s", strerror(errno));
         return ERROR;

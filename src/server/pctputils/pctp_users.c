@@ -128,6 +128,10 @@ unsigned add_pass_read(struct selector_key *key) {
             new_pass[pctp_data->new_password_len] = 0;
 
             add_user(pctp_data->config, new_user, new_pass, pctp_data->level);
+
+            free(new_user);
+            free(new_pass);
+
             LOG(LOG_DEBUG, "Added new user credentials");
             write_msg_to_buffer(&pctp_data->write_buffer, OK_ADD_PASS_MSG);
             return MAIN_WRITE;

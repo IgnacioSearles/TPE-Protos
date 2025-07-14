@@ -47,11 +47,6 @@
 /** Cantidad por defecto de logs a enviar */
 #define DEFAULT_LOGS_TO_SEND 100
 
-/** Usuario administrador por defecto */
-#define DEFAULT_ADMIN_USER "username"
-/** Contraseña administrador por defecto */
-#define DEFAULT_ADMIN_PASS "password"
-
 /**
  * Estructura principal para sesiones PCTP
  * 

@@ -9,12 +9,29 @@ int count_admins(server_config* config) {
     return count;
 }
 
+static char* copy_str(const char* str) {
+    int len = strlen(str);
+    char* out = malloc(len + 1);
+    if (out == NULL) return NULL;
+    strcpy(out, str);
+    return out;
+}
+
 int add_user(server_config* config, char* user, char* pass, user_role role) {
     if (config->user_count >= MAX_USERS)
         return -1;
 
-    config->users[config->user_count].user = user;
-    config->users[config->user_count].pass = pass;
+    char* new_user = copy_str(user);
+    char* new_pass = copy_str(pass);
+
+    if (new_user == NULL || new_pass == NULL) {
+        free(new_user);
+        free(new_pass);
+        return -1;
+    }
+
+    config->users[config->user_count].user = new_user;
+    config->users[config->user_count].pass = new_pass;
     config->users[config->user_count].role = role;
     config->user_count++;
 
@@ -36,6 +53,7 @@ int del_user(server_config* config, char* user_to_del, int name_len) {
     free(config->users[i].pass);
     config->user_count--;
     for (; i<config->user_count; i++) config->users[i] = config->users[i+1];
+    if (config->user_count == 0) add_user(config, DEFAULT_ADMIN_USER, DEFAULT_ADMIN_PASS, ADMIN);
     return 0;
 }
 

@@ -11,6 +11,11 @@
 #define MAX_INITIAL_USERS 10
 #define MAX_USERS 50
 
+/** Usuario administrador por defecto */
+#define DEFAULT_ADMIN_USER "username"
+/** Contraseña administrador por defecto */
+#define DEFAULT_ADMIN_PASS "password"
+
 #define INITIAL_SOCKS_BUFFER_SIZE 4096
 
 typedef enum {
